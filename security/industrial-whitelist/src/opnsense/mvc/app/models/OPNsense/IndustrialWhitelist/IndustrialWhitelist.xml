@@ -44,6 +44,10 @@
                     <OptionValues>
                         <modbus_tcp>Modbus TCP (Port 502)</modbus_tcp>
                         <s7comm>S7Comm (Port 102)</s7comm>
+                        <eip>EtherNet/IP (TCP/UDP 44818, UDP 2222)</eip>
+                        <iec104>IEC 60870-5-104 (TCP 2404)</iec104>
+                        <dnp3>DNP3 (TCP/UDP 20000)</dnp3>
+                        <bacnet>BACnet (UDP 47808)</bacnet>
                     </OptionValues>
                 </protocol>
                 <description type="DescriptionField"/>

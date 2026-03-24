@@ -5,7 +5,13 @@
 Industrial Whitelist 是一个面向工业协议场景的 OPNsense 防火墙插件，提供“白名单放行 + 默认动作控制”的最小可用能力。
 
 当前实现目标：
-- 对 Modbus TCP (502) / S7Comm (102) 建立白名单规则。
+- 对以下工业协议建立白名单规则（L4 固定端口）：
+  - Modbus TCP (502)
+  - S7Comm (102)
+  - EtherNet/IP (TCP/UDP 44818, UDP 2222)
+  - IEC 60870-5-104 (TCP 2404)
+  - DNP3 (TCP/UDP 20000)
+  - BACnet (UDP 47808)
 - 允许按源地址、目的地址、协议类型进行规则管理。
 - 未命中白名单时执行默认动作（Block 或 Log Only）。
 - 提供独立配置页与日志页。
@@ -51,6 +57,7 @@ Apply 行为：
 - Source（支持 IP/CIDR/Alias/any）
 - Destination（支持 IP/CIDR/Alias/any）
 - Protocol（Modbus TCP / S7Comm）
+- Protocol（Modbus TCP / S7Comm / EtherNet-IP / IEC104 / DNP3 / BACnet）
 - Description
 
 已实现操作：
@@ -67,15 +74,19 @@ Apply 行为：
 插件通过防火墙 Hook 使用高优先级直接注入规则，优先于普通 Interface Rules：
 
 - 白名单放行规则：Priority `10000`
-  - 为每条启用规则生成 `pass in quick tcp ...`
+  - 为每条启用规则按协议字典动态生成 `pass in quick <tcp|udp> ...`
   - 协议映射：
     - `modbus_tcp` -> 502
     - `s7comm` -> 102
+    - `eip` -> tcp/44818, udp/44818, udp/2222
+    - `iec104` -> tcp/2404
+    - `dnp3` -> tcp/20000, udp/20000
+    - `bacnet` -> udp/47808
 
 - 默认动作规则：Priority `15000`
-  - 对工业端口 `502` 与 `102` 注入默认策略
-  - `default_action = block` 时：`block in quick tcp ... log`
-  - `default_action = log_only` 时：`pass in quick tcp ... log`
+  - 对所有受管工业协议端口注入默认策略（TCP/UDP 组合）
+  - `default_action = block` 时：`block in quick <tcp|udp> ... log`
+  - `default_action = log_only` 时：`pass in quick <tcp|udp> ... log`
 
 该模型确保工业端口流量在进入普通规则（通常优先级 50000+）之前即被处理。
 
@@ -120,6 +131,7 @@ Apply 行为：
 - 自动资产发现
 - Suricata L7 策略自动生成
 - HA 同步
+- 动态端口协商协议（如 OPC DA/DCOM）
 
 ---
 

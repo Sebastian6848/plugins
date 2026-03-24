@@ -63,6 +63,9 @@
 
 <div class="tab-content content-box">
     <div id="tab_general" class="tab-pane fade in active">
+        <div class="alert alert-danger" role="alert" style="margin-top: 10px;">
+            {{ lang._('⚠️ 本插件已在底层接管 Modbus(502) 及 S7Comm(102) 的流量调度，原生防火墙关于此两类端口的规则已被静默覆盖。') }}
+        </div>
         {{ partial('layout_partials/base_form', ['fields': formSettings, 'id': 'frm_settings']) }}
     </div>
     <div id="tab_rules" class="tab-pane fade in">
