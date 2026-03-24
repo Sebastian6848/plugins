@@ -11,4 +11,9 @@ class IndexController extends \OPNsense\Base\IndexController
         $this->view->formDialogRule = $this->getForm('dialogRule');
         $this->view->formGridRule = $this->getFormGrid('dialogRule');
     }
+
+    public function logsAction()
+    {
+        $this->view->pick('OPNsense/IndustrialWhitelist/logs');
+    }
 }
