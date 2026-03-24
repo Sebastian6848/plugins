@@ -1,8 +1,8 @@
 <menu>
     <Firewall>
         <IndustrialWhitelist VisibleName="Industrial Whitelist" cssClass="fa fa-industry fa-fw">
-            <Configuration VisibleName="配置" url="/ui/industrialwhitelist"/>
-            <Logs VisibleName="日志" url="/ui/industrialwhitelist/index/logs"/>
+            <Configuration VisibleName="Configuration" url="/ui/industrialwhitelist"/>
+            <Logs VisibleName="Logs" url="/ui/industrialwhitelist/index/logs"/>
         </IndustrialWhitelist>
     </Firewall>
 </menu>

@@ -57,8 +57,8 @@
 </script>
 
 <ul class="nav nav-tabs" data-tabs="tabs" id="maintabs">
-    <li class="active"><a data-toggle="tab" href="#tab_general">{{ lang._('常规设置') }}</a></li>
-    <li><a data-toggle="tab" href="#tab_rules">{{ lang._('规则') }}</a></li>
+    <li class="active"><a data-toggle="tab" href="#tab_general">{{ lang._('General Settings') }}</a></li>
+    <li><a data-toggle="tab" href="#tab_rules">{{ lang._('Rules') }}</a></li>
 </ul>
 
 <div class="tab-content content-box">
@@ -75,7 +75,7 @@
         <div class="col-md-12">
             <hr/>
             <div class="alert alert-info" role="alert">
-                {{ lang._('Tip: drag rows in Rules tab to change matching priority, then click Apply.') }}
+                {{ lang._('Tip: drag rows in the Rules tab to change matching priority, then click Apply.') }}
             </div>
             <button class="btn btn-primary" id="reconfigureAct"
                     data-endpoint="/api/industrialwhitelist/service/reconfigure"
