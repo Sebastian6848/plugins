@@ -37,19 +37,29 @@ class ServiceController extends ApiControllerBase
 
     private function clearManagedRules(Filter $filterModel): void
     {
+        $keys = [];
         foreach ($filterModel->rules->rule->iterateItems() as $nodeKey => $rule) {
             if (strpos((string)$rule->description, self::MANAGED_TAG) === 0) {
-                $filterModel->rules->rule->Del($nodeKey);
+                $keys[] = $nodeKey;
             }
+        }
+
+        foreach ($keys as $nodeKey) {
+            $filterModel->rules->rule->Del($nodeKey);
         }
     }
 
     private function clearManagedAliases(Alias $aliasModel): void
     {
+        $keys = [];
         foreach ($aliasModel->aliases->alias->iterateItems() as $nodeKey => $alias) {
             if (strpos((string)$alias->description, self::MANAGED_TAG) === 0) {
-                $aliasModel->aliases->alias->Del($nodeKey);
+                $keys[] = $nodeKey;
             }
+        }
+
+        foreach ($keys as $nodeKey) {
+            $aliasModel->aliases->alias->Del($nodeKey);
         }
     }
 
