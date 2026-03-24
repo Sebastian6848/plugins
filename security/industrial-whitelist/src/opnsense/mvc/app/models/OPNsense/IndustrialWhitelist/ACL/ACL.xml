@@ -1,0 +1,12 @@
+<acl>
+    <page-industrialwhitelist-user>
+        <name>Firewall: IndustrialWhitelist</name>
+        <patterns>
+            <pattern>ui/industrialwhitelist/*</pattern>
+            <pattern>api/industrialwhitelist/settings/*</pattern>
+            <pattern>api/industrialwhitelist/rules/*</pattern>
+            <pattern>api/industrialwhitelist/service/*</pattern>
+            <pattern>ui/diagnostics/log/core/filter*</pattern>
+        </patterns>
+    </page-industrialwhitelist-user>
+</acl>

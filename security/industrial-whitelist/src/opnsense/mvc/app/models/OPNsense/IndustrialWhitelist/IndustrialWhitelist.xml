@@ -1,0 +1,53 @@
+<model>
+    <mount>//OPNsense/IndustrialWhitelist</mount>
+    <description>Industrial protocol whitelist</description>
+    <items>
+        <general>
+            <enabled type="BooleanField">
+                <Default>0</Default>
+                <Required>Y</Required>
+            </enabled>
+            <default_action type="OptionField">
+                <Required>Y</Required>
+                <Default>log_only</Default>
+                <OptionValues>
+                    <block>Block</block>
+                    <log_only>Log Only</log_only>
+                </OptionValues>
+            </default_action>
+        </general>
+        <rules>
+            <rule type="ArrayField">
+                <enabled type="BooleanField">
+                    <Default>1</Default>
+                    <Required>Y</Required>
+                </enabled>
+                <sequence type="AutoNumberField">
+                    <MinimumValue>1</MinimumValue>
+                    <MaximumValue>99999</MaximumValue>
+                </sequence>
+                <source type="TextField">
+                    <Required>Y</Required>
+                    <Default>any</Default>
+                    <Mask>/^([A-Za-z0-9_\-\.:\/]+|any)$/</Mask>
+                    <ValidationMessage>Use IP/CIDR/Alias or "any".</ValidationMessage>
+                </source>
+                <destination type="TextField">
+                    <Required>Y</Required>
+                    <Default>any</Default>
+                    <Mask>/^([A-Za-z0-9_\-\.:\/]+|any)$/</Mask>
+                    <ValidationMessage>Use IP/CIDR/Alias or "any".</ValidationMessage>
+                </destination>
+                <protocol type="OptionField">
+                    <Required>Y</Required>
+                    <Default>modbus_tcp</Default>
+                    <OptionValues>
+                        <modbus_tcp>Modbus TCP (Port 502)</modbus_tcp>
+                        <s7comm>S7Comm (Port 102)</s7comm>
+                    </OptionValues>
+                </protocol>
+                <description type="DescriptionField"/>
+            </rule>
+        </rules>
+    </items>
+</model>

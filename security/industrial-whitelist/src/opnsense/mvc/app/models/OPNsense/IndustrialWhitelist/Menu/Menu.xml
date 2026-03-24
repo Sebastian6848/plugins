@@ -1,0 +1,8 @@
+<menu>
+    <Firewall>
+        <IndustrialWhitelist VisibleName="Industrial Whitelist" cssClass="fa fa-industry fa-fw" url="/ui/industrialwhitelist"/>
+        <LogFiles>
+            <IndustrialWhitelistLog VisibleName="Industrial Whitelist" order="450" url="/ui/diagnostics/log/core/filter"/>
+        </LogFiles>
+    </Firewall>
+</menu>

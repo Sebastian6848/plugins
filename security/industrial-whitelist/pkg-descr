@@ -1,0 +1,7 @@
+Industrial protocol whitelist plugin for OPNsense.
+
+MVP scope:
+- General enable/default action control
+- Rule CRUD for source, destination and protocol (Modbus TCP/S7Comm)
+- pf-based allowlist enforcement with default action
+- Log entry in Firewall Log Files

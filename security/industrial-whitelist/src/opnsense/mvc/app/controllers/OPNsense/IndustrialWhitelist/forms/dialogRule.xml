@@ -1,0 +1,46 @@
+<form>
+    <field>
+        <id>rule.enabled</id>
+        <label>Enabled</label>
+        <type>checkbox</type>
+        <help>Enable this rule.</help>
+        <grid_view>
+            <width>6em</width>
+            <type>boolean</type>
+            <formatter>rowtoggle</formatter>
+        </grid_view>
+    </field>
+    <field>
+        <id>rule.sequence</id>
+        <label>Sequence</label>
+        <type>text</type>
+        <help>Rule order, lower values are matched first.</help>
+        <grid_view>
+            <width>7em</width>
+        </grid_view>
+    </field>
+    <field>
+        <id>rule.source</id>
+        <label>Source</label>
+        <type>text</type>
+        <help>Source IP/CIDR or Firewall Alias (or any).</help>
+    </field>
+    <field>
+        <id>rule.destination</id>
+        <label>Destination</label>
+        <type>text</type>
+        <help>Destination IP/CIDR or Firewall Alias (or any).</help>
+    </field>
+    <field>
+        <id>rule.protocol</id>
+        <label>Protocol</label>
+        <type>dropdown</type>
+        <help>Industrial protocol and mapped port.</help>
+    </field>
+    <field>
+        <id>rule.description</id>
+        <label>Description</label>
+        <type>text</type>
+        <help>Optional notes.</help>
+    </field>
+</form>

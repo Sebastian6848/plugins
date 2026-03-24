@@ -1,0 +1,14 @@
+<form>
+    <field>
+        <id>industrialwhitelist.general.enabled</id>
+        <label>Enable</label>
+        <type>checkbox</type>
+        <help>Enable industrial protocol whitelist enforcement.</help>
+    </field>
+    <field>
+        <id>industrialwhitelist.general.default_action</id>
+        <label>Default Action</label>
+        <type>dropdown</type>
+        <help>Action when traffic does not match any whitelist rule.</help>
+    </field>
+</form>
