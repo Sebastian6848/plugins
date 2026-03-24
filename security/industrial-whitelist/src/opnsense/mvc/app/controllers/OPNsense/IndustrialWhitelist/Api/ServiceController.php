@@ -136,8 +136,8 @@ class ServiceController extends ApiControllerBase
             $sourceValue = $this->normalizeAddress((string)$rule->source);
             $destinationValue = $this->normalizeAddress((string)$rule->destination);
 
-            $source = $this->ensureAlias($aliasModel, 'alias_industrial_src_' . $shortUuid, $sourceValue);
-            $destination = $this->ensureAlias($aliasModel, 'alias_industrial_dst_' . $shortUuid, $destinationValue);
+            $source = $this->ensureAlias($aliasModel, 'iw_src_' . $shortUuid, $sourceValue);
+            $destination = $this->ensureAlias($aliasModel, 'iw_dst_' . $shortUuid, $destinationValue);
 
             $protocol = (string)$rule->protocol;
             $port = $this->protocolPort($protocol);
