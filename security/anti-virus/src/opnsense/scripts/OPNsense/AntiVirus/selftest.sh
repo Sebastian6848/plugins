@@ -6,6 +6,8 @@ SOCKET_PATH="/var/run/clamav/clamd.sock"
 PID_PATH="/var/run/antivirus/antivirusd.pid"
 STATS_PATH="/var/run/antivirus/stats.json"
 LOG_PATH="/var/log/antivirusd.log"
+EVENTS_LOG_PATH="/var/log/antivirus_events.log"
+EXTRACT_DIR="/var/run/av_extract"
 
 PASS_COUNT=0
 FAIL_COUNT=0
@@ -70,6 +72,36 @@ contains_running_status()
     echo "${_status}" | grep -Eiq 'running|degraded'
 }
 
+get_stat_value()
+{
+    _key="$1"
+    if [ ! -r "${STATS_PATH}" ]; then
+        echo 0
+        return 0
+    fi
+    _value="$(sed -n "s/.*\"${_key}\": *\([0-9][0-9]*\).*/\1/p" "${STATS_PATH}" | tail -n 1)"
+    if [ -z "${_value}" ]; then
+        echo 0
+    else
+        echo "${_value}"
+    fi
+}
+
+wait_infected_increase()
+{
+    _base="$1"
+    _retries="${2:-20}"
+    while [ "${_retries}" -gt 0 ]; do
+        _current="$(get_stat_value infected)"
+        if [ "${_current}" -gt "${_base}" ]; then
+            return 0
+        fi
+        _retries=$((_retries - 1))
+        sleep 1
+    done
+    return 1
+}
+
 section()
 {
     log ""
@@ -108,6 +140,30 @@ if [ -r "${STATS_PATH}" ] && grep -Eq '"started_at"|"queued"|"scanned"' "${STATS
     pass "stats file is readable (${STATS_PATH})"
 else
     fail "stats file missing or invalid (${STATS_PATH})"
+fi
+
+section "EICAR detection"
+mkdir -p "${EXTRACT_DIR}" >/dev/null 2>&1 || true
+EICAR_FILE="${EXTRACT_DIR}/selftest-eicar.bin"
+rm -f "${EICAR_FILE}" "${EICAR_FILE}.meta" >/dev/null 2>&1 || true
+
+INFECTED_BEFORE="$(get_stat_value infected)"
+
+printf 'X5O!P%%@AP[4\\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*' > "${EICAR_FILE}"
+cat > "${EICAR_FILE}.meta" << 'EOF'
+{"source_ip":"198.51.100.10"}
+EOF
+
+if wait_infected_increase "${INFECTED_BEFORE}" 20; then
+    pass "EICAR sample detected (infected counter increased)"
+else
+    fail "EICAR sample not detected within timeout"
+fi
+
+if [ -r "${EVENTS_LOG_PATH}" ] && tail -n 50 "${EVENTS_LOG_PATH}" | grep -Eiq 'eicar|test'; then
+    pass "event log contains EICAR/test signature hint"
+else
+    fail "event log missing EICAR/test signature hint"
 fi
 
 section "Restart consistency"

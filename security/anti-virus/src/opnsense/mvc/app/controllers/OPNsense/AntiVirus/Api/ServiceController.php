@@ -2,11 +2,16 @@
 
 namespace OPNsense\AntiVirus\Api;
 
-use OPNsense\Base\ApiControllerBase;
+use OPNsense\Base\ApiMutableServiceControllerBase;
 use OPNsense\Core\Backend;
 
-class ServiceController extends ApiControllerBase
+class ServiceController extends ApiMutableServiceControllerBase
 {
+    protected static $internalServiceClass = '\\OPNsense\\AntiVirus\\AntiVirus';
+    protected static $internalServiceTemplate = 'OPNsense/AntiVirus';
+    protected static $internalServiceEnabled = 'general.enabled';
+    protected static $internalServiceName = 'antivirus';
+
     private function hasError($output)
     {
         return stripos($output, 'error') !== false || stripos($output, 'failed') !== false;
