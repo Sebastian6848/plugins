@@ -11,7 +11,10 @@ DAEMON_SCRIPT="/usr/local/opnsense/scripts/OPNsense/AntiVirus/antivirusd.py"
 ensure_dirs()
 {
     mkdir -p "${RUN_DIR}" "${EXTRACT_DIR}" /var/log
-    chmod 700 "${RUN_DIR}" "${EXTRACT_DIR}"
+    chmod 700 "${RUN_DIR}"
+    # clamd runs as user clamav and must be able to traverse/read extracted files.
+    chown root:clamav "${EXTRACT_DIR}" >/dev/null 2>&1 || true
+    chmod 750 "${EXTRACT_DIR}"
 }
 
 is_running()
