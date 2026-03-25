@@ -48,6 +48,12 @@ function industrialwhitelist_protocol_map()
                 ['proto' => 'udp', 'port' => '20000']
             ]
         ],
+        'mqtt' => [
+            'tuples' => [
+                ['proto' => 'tcp', 'port' => '1883'],
+                ['proto' => 'tcp', 'port' => '8883']
+            ]
+        ],
         'bacnet' => [
             'tuples' => [
                 ['proto' => 'udp', 'port' => '47808']

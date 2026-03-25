@@ -47,9 +47,19 @@
                         <eip>EtherNet/IP (TCP/UDP 44818, UDP 2222)</eip>
                         <iec104>IEC 60870-5-104 (TCP 2404)</iec104>
                         <dnp3>DNP3 (TCP/UDP 20000)</dnp3>
+                        <mqtt>MQTT (TCP 1883/8883)</mqtt>
                         <bacnet>BACnet (UDP 47808)</bacnet>
                     </OptionValues>
                 </protocol>
+                <AllowedFunctionCodes type="OptionField">
+                    <Multiple>Y</Multiple>
+                    <OptionValues>
+                        <read_only>Read Only (FC 1-4)</read_only>
+                        <write_single>Write Single (FC 5-6)</write_single>
+                        <write_multiple>Write Multiple (FC 15-16)</write_multiple>
+                        <diagnostic>Diagnostic (FC 8)</diagnostic>
+                    </OptionValues>
+                </AllowedFunctionCodes>
                 <description type="DescriptionField"/>
             </rule>
         </rules>

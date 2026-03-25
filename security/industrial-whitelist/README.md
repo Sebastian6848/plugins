@@ -1,164 +1,95 @@
-# Industrial Whitelist Plugin (MVP)
+# Industrial Whitelist Plugin (v1.5)
 
-## 1. 插件目标
+## 1. 核心架构：L4 + L7 纵深防御
 
-Industrial Whitelist 是一个面向工业协议场景的 OPNsense 防火墙插件，提供“白名单放行 + 默认动作控制”的最小可用能力。
+v1.5 将策略执行分为两个阶段：
 
-当前实现目标：
-- 对以下工业协议建立白名单规则（L4 固定端口）：
-  - Modbus TCP (502)
-  - S7Comm (102)
-  - EtherNet/IP (TCP/UDP 44818, UDP 2222)
-  - IEC 60870-5-104 (TCP 2404)
-  - DNP3 (TCP/UDP 20000)
-  - BACnet (UDP 47808)
-- 允许按源地址、目的地址、协议类型进行规则管理。
-- 未命中白名单时执行默认动作（Block 或 Log Only）。
-- 提供独立配置页与日志页。
+- 第一层（L4 / pf）：
+  - 使用 `registerFilterRule()` 在内核层做白名单准入控制。
+  - 规则优先级：白名单放行 `10000`，默认动作 `15000`。
+  - 目标：高吞吐下先拦截未授权访问，降低扫描流量对防火墙性能冲击。
 
----
+- 第二层（L7 / Suricata IPS）：
+  - 为通过 L4 的合法工业流量生成 Suricata 自定义规则。
+  - 目标：按协议功能码拦截越权指令和协议伪装流量。
 
-## 2. 当前已实现功能
+## 2. 协议支持边界
 
-### 2.1 菜单与页面结构
+### 2.1 L7 深度管控（全功能）
 
-侧边栏路径：
-- Firewall -> Industrial Whitelist -> Configuration
-- Firewall -> Industrial Whitelist -> Logs
+- Modbus TCP (`502`)
+- DNP3 (`20000`)
+- EtherNet/IP / CIP (`44818`, `2222`)
+- MQTT (`1883`, `8883`)
 
-其中：
-- Configuration 页内包含 2 个 Tab：
-  - General Settings
-  - Rules
-- Logs 页为独立页面，用于展示与插件规则相关的日志记录。
+### 2.2 L4 端口管控（降级）
 
----
+- S7Comm (`102`)
+- IEC 104 (`2404`)
+- BACnet (`47808`)
 
-### 2.2 General Settings
+说明：L4-only 协议不生成 Suricata 功能码规则，避免脆弱字节匹配导致误报。
 
-已实现字段：
-- Enable
-  - 开启/关闭插件强制过滤逻辑。
-- Default Action
-  - `block`
-  - `log_only`
+## 3. 控制面改造
 
-Apply 行为：
-- 点击 Apply 后调用后端 reconfigure 接口。
-- 后端执行 `filter reload`，重新生成并应用 pf 规则。
+### 3.1 模型字段
 
----
+规则模型新增：
 
-### 2.3 Rules（白名单规则管理）
+- `AllowedFunctionCodes`（多选）
+  - `read_only` (FC 1-4)
+  - `write_single` (FC 5-6)
+  - `write_multiple` (FC 15-16)
+  - `diagnostic` (FC 8)
 
-已实现字段：
-- Enabled
-- Sequence
-- Source（支持 IP/CIDR/Alias/any）
-- Destination（支持 IP/CIDR/Alias/any）
-- Protocol（Modbus TCP / S7Comm）
-- Protocol（Modbus TCP / S7Comm / EtherNet-IP / IEC104 / DNP3 / BACnet）
-- Description
+### 3.2 UI 动态联动
 
-已实现操作：
-- 新增、编辑、删除、启用/禁用
-- 拖拽排序（前端拖拽后提交 sequence）
+在规则编辑弹窗中：
 
-规则优先级：
-- 按 Sequence 升序匹配。
+- 选择 `Modbus TCP` / `DNP3`：显示 `Allowed Function Codes`。
+- 选择其它协议：隐藏该字段，并提示“当前协议仅支持网络层 (IP/端口) 访问控制”。
 
----
+## 4. 数据面编译与下发
 
-### 2.4 高优先级强制过滤逻辑（MVP）
+### 4.1 L4 注入
 
-插件通过防火墙 Hook 使用高优先级直接注入规则，优先于普通 Interface Rules：
+所有启用规则继续由 `industrialwhitelist.inc` 注入 pf：
 
-- 白名单放行规则：Priority `10000`
-  - 为每条启用规则按协议字典动态生成 `pass in quick <tcp|udp> ...`
-  - 协议映射：
-    - `modbus_tcp` -> 502
-    - `s7comm` -> 102
-    - `eip` -> tcp/44818, udp/44818, udp/2222
-    - `iec104` -> tcp/2404
-    - `dnp3` -> tcp/20000, udp/20000
-    - `bacnet` -> udp/47808
+- `pass in quick ...`（命中白名单）
+- `block|pass in quick ... log`（默认动作）
 
-- 默认动作规则：Priority `15000`
-  - 对所有受管工业协议端口注入默认策略（TCP/UDP 组合）
-  - `default_action = block` 时：`block in quick <tcp|udp> ... log`
-  - `default_action = log_only` 时：`pass in quick <tcp|udp> ... log`
+覆盖端口：`502/102/44818/2222/2404/20000/1883/8883/47808`（按 TCP/UDP 协议组）。
 
-该模型确保工业端口流量在进入普通规则（通常优先级 50000+）之前即被处理。
+### 4.2 L7 规则生成
 
----
+新增 Python 编译器：
 
-### 2.5 日志页面
+- 脚本路径：`src/opnsense/scripts/OPNsense/IndustrialWhitelist/generate_suricata_rules.py`
+- 输出文件：`/usr/local/etc/suricata/custom_industrial.rules`
 
-日志页实现方式：
-- 调用 `/api/diagnostics/firewall/log?limit=500` 读取防火墙日志。
-- 在前端过滤包含 `industrialwhitelist` 关键字的记录。
-- 表格列：
-  - Timestamp
-  - Source
-  - Destination
-  - Protocol/Port
-  - Action
-- 即使没有匹配日志，也会显示空表格并展示提示行。
+编译规则：
 
----
+- 遍历 `config.xml` 中 IndustrialWhitelist 规则。
+- 仅对 `Modbus TCP` / `DNP3` 且配置了 `AllowedFunctionCodes` 的规则生成 `pass` 功能码规则。
+- 追加同源同目的 `drop` 兜底规则，阻断未授权功能码。
+- 文件末尾追加协议伪装防护（`app-layer-protocol`）规则。
 
-### 2.6 ACL 与访问控制
+## 5. Apply 工作流
 
-已配置 ACL 模式覆盖：
-- `ui/industrialwhitelist/*`
-- `api/industrialwhitelist/settings/*`
-- `api/industrialwhitelist/rules/*`
-- `api/industrialwhitelist/service/*`
-- `ui/diagnostics/log/core/filter*`
+点击 Apply 后，后端执行顺序：
 
----
+1. `industrialwhitelist generate`（生成 Suricata 自定义规则）
+2. `filter reload`（刷新 pf）
+3. `ids reload`（重载 IDS 规则）
 
-## 3. 当前实现边界（MVP）
+前提：需在 `Services -> Intrusion Detection -> Administration` 启用 `Enabled` 与 `IPS mode`，并选择监听接口。
 
-已覆盖：
-- 独立菜单、配置页与日志页
-- 白名单规则 CRUD 与排序
-- 高优先级 Hook 强制过滤（白名单放行 + 工业端口默认策略）
-- 应用配置并重载 filter
+## 6. 关键文件
 
-未覆盖：
-- DPI 功能码级过滤（如 Modbus 读写区分）
-- 自动资产发现
-- Suricata L7 策略自动生成
-- HA 同步
-- 动态端口协商协议（如 OPC DA/DCOM）
-
----
-
-## 4. 关键文件
-
-- 模型
-  - `src/opnsense/mvc/app/models/OPNsense/IndustrialWhitelist/IndustrialWhitelist.xml`
-- 菜单
-  - `src/opnsense/mvc/app/models/OPNsense/IndustrialWhitelist/Menu/Menu.xml`
-- ACL
-  - `src/opnsense/mvc/app/models/OPNsense/IndustrialWhitelist/ACL/ACL.xml`
-- 配置页面
-  - `src/opnsense/mvc/app/views/OPNsense/IndustrialWhitelist/index.volt`
-- 日志页面
-  - `src/opnsense/mvc/app/views/OPNsense/IndustrialWhitelist/logs.volt`
-- 规则 API
-  - `src/opnsense/mvc/app/controllers/OPNsense/IndustrialWhitelist/Api/RulesController.php`
-- Apply API
-  - `src/opnsense/mvc/app/controllers/OPNsense/IndustrialWhitelist/Api/ServiceController.php`
-- pf Hook 注入逻辑
-  - `src/etc/inc/plugins.inc.d/industrialwhitelist.inc`
-
----
-
-## 5. 后续建议
-
-建议下一阶段优先做：
-1. 日志过滤增强（精确匹配 502/102 + 规则描述字段）。
-2. Source/Destination 字段类型进一步收敛到专用 Alias/Network 字段。
-3. 增加规则冲突可视化（与现有 Firewall 规则优先级对照）。
+- `src/etc/inc/plugins.inc.d/industrialwhitelist.inc`
+- `src/opnsense/mvc/app/models/OPNsense/IndustrialWhitelist/IndustrialWhitelist.xml`
+- `src/opnsense/mvc/app/controllers/OPNsense/IndustrialWhitelist/forms/dialogRule.xml`
+- `src/opnsense/mvc/app/views/OPNsense/IndustrialWhitelist/index.volt`
+- `src/opnsense/mvc/app/controllers/OPNsense/IndustrialWhitelist/Api/ServiceController.php`
+- `src/opnsense/service/conf/actions.d/actions_industrialwhitelist.conf`
+- `src/opnsense/scripts/OPNsense/IndustrialWhitelist/generate_suricata_rules.py`

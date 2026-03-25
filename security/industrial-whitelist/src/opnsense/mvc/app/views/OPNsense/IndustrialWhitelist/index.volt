@@ -1,6 +1,39 @@
 <script>
     $(document).ready(function () {
         const getMap = {'frm_settings': '/api/industrialwhitelist/settings/get'};
+        const l7Protocols = ['modbus_tcp', 'dnp3'];
+
+        const updateFunctionCodeFieldVisibility = function () {
+            const dialog = $('#{{ formGridRule["edit_dialog_id"] }}');
+            if (!dialog.length) {
+                return;
+            }
+
+            const protocolInput = dialog.find('[name="rule.protocol"]').first();
+            const functionCodeInput = dialog.find('[name="rule.AllowedFunctionCodes[]"], [name="rule.AllowedFunctionCodes"]').first();
+            if (!protocolInput.length || !functionCodeInput.length) {
+                return;
+            }
+
+            const selectedProtocol = protocolInput.val();
+            const functionCodeGroup = functionCodeInput.closest('.form-group');
+            const hintId = 'iw-l4-only-hint';
+            let hintBox = dialog.find('#' + hintId);
+
+            if (!hintBox.length) {
+                hintBox = $('<div class="alert alert-info" id="' + hintId + '" style="margin-top: 8px;"></div>');
+                hintBox.text('{{ lang._("Current protocol only supports network-layer (IP/port) access control.") }}');
+                functionCodeGroup.after(hintBox);
+            }
+
+            if (l7Protocols.indexOf(selectedProtocol) >= 0) {
+                functionCodeGroup.show();
+                hintBox.hide();
+            } else {
+                functionCodeGroup.hide();
+                hintBox.show();
+            }
+        };
 
         mapDataToFormUI(getMap).done(function () {
             $('.selectpicker').selectpicker('refresh');
@@ -53,6 +86,14 @@
                 return deferred;
             }
         });
+
+        $(document).on('shown.bs.modal', '#{{ formGridRule["edit_dialog_id"] }}', function () {
+            updateFunctionCodeFieldVisibility();
+        });
+
+        $(document).on('change', '#{{ formGridRule["edit_dialog_id"] }} [name="rule.protocol"]', function () {
+            updateFunctionCodeFieldVisibility();
+        });
     });
 </script>
 
@@ -64,7 +105,13 @@
 <div class="tab-content content-box">
     <div id="tab_general" class="tab-pane fade in active">
         <div class="alert alert-danger" role="alert" style="margin-top: 10px;">
-            {{ lang._('⚠️ 本插件已在底层接管 Modbus(502) 及 S7Comm(102) 的流量调度，原生防火墙关于此两类端口的规则已被静默覆盖。') }}
+            {{ lang._('⚠️ This plugin has taken over the traffic scheduling of the industrial protocol at the underlying level. The rules of the native firewall regarding these two types of ports have been silently overwritten.') }}
+        </div>
+        <div class="alert alert-warning" role="alert" style="margin-top: 10px;">
+            {{ lang._('Prerequisite: enable Intrusion Detection and IPS mode with monitored interfaces in Services -> Intrusion Detection -> Administration.') }}
+            <a class="btn btn-default btn-xs" href="/ui/ids" style="margin-left: 8px;">
+                {{ lang._('Open IDS Settings') }}
+            </a>
         </div>
         {{ partial('layout_partials/base_form', ['fields': formSettings, 'id': 'frm_settings']) }}
     </div>

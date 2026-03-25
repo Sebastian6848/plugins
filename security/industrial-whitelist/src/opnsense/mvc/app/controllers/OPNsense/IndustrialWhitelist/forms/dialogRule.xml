@@ -38,6 +38,12 @@
         <help>Industrial protocol and mapped port.</help>
     </field>
     <field>
+        <id>rule.AllowedFunctionCodes</id>
+        <label>Allowed Function Codes</label>
+        <type>select_multiple</type>
+        <help>Only used for L7-capable protocols (Modbus TCP, DNP3).</help>
+    </field>
+    <field>
         <id>rule.description</id>
         <label>Description</label>
         <type>text</type>
