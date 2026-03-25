@@ -1,0 +1,8 @@
+<menu>
+    <Firewall>
+        <AntiVirus VisibleName="Industrial AntiVirus" cssClass="fa fa-shield fa-fw">
+            <Configuration VisibleName="Configuration" url="/ui/antivirus"/>
+            <Records VisibleName="Records" url="/ui/antivirus/index/records"/>
+        </AntiVirus>
+    </Firewall>
+</menu>

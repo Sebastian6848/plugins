@@ -1,0 +1,7 @@
+Industrial sidecar antivirus plugin for OPNsense.
+
+Design goals:
+- zero-latency forwarding (fail-open)
+- plaintext extraction only (HTTP/FTP/SMB)
+- asynchronous scan queue (ClamAV LocalSocket)
+- dynamic source blocking using PF table updates

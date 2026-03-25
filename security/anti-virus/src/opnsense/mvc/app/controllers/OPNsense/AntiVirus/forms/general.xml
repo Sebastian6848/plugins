@@ -1,0 +1,83 @@
+<form>
+    <field>
+        <id>antivirus.general.enabled</id>
+        <label>Enable</label>
+        <type>checkbox</type>
+        <help>Enable industrial sidecar antivirus service.</help>
+    </field>
+    <field>
+        <id>antivirus.general.extract_dir</id>
+        <label>Extract Directory (tmpfs)</label>
+        <type>text</type>
+        <help>Suricata extracted files directory. Use a tmpfs path for zero-disk I/O.</help>
+    </field>
+    <field>
+        <id>antivirus.general.max_file_size_mb</id>
+        <label>Max File Size (MB)</label>
+        <type>text</type>
+        <help>Files larger than this limit are skipped and deleted immediately.</help>
+    </field>
+    <field>
+        <id>antivirus.general.queue_size</id>
+        <label>Scan Queue Size</label>
+        <type>text</type>
+        <help>Bounded queue length. New files are dropped when full (fail-open).</help>
+    </field>
+    <field>
+        <id>antivirus.general.worker_threads</id>
+        <label>Worker Threads</label>
+        <type>text</type>
+        <help>Concurrent clamd scanning workers.</help>
+    </field>
+    <field>
+        <id>antivirus.general.cache_ttl_seconds</id>
+        <label>Safe Cache TTL (seconds)</label>
+        <type>text</type>
+        <help>Safe hash cache expiration period.</help>
+    </field>
+    <field>
+        <id>antivirus.general.block_duration_seconds</id>
+        <label>Block Duration (seconds)</label>
+        <type>text</type>
+        <help>Temporary source block duration on malware detection.</help>
+    </field>
+    <field>
+        <id>antivirus.general.block_table</id>
+        <label>PF Block Table</label>
+        <type>text</type>
+        <help>PF table name used for dynamic source blocking.</help>
+    </field>
+    <field>
+        <id>antivirus.general.extensions</id>
+        <label>High-Risk Extensions</label>
+        <type>text</type>
+        <help>Comma separated extension list, e.g. exe,dll,elf,sh,bin.</help>
+    </field>
+    <field>
+        <id>antivirus.general.scan_http</id>
+        <label>Scan HTTP</label>
+        <type>checkbox</type>
+    </field>
+    <field>
+        <id>antivirus.general.scan_ftp</id>
+        <label>Scan FTP</label>
+        <type>checkbox</type>
+    </field>
+    <field>
+        <id>antivirus.general.scan_smb</id>
+        <label>Scan SMB</label>
+        <type>checkbox</type>
+    </field>
+    <field>
+        <id>antivirus.general.enforce_tls_baseline</id>
+        <label>Enable TLS Baseline Enforcement Hint</label>
+        <type>checkbox</type>
+        <help>Only applies SNI/TLS fingerprint baseline policy in IDS; no MITM decryption.</help>
+    </field>
+    <field>
+        <id>antivirus.general.clamd_socket</id>
+        <label>Clamd LocalSocket</label>
+        <type>text</type>
+        <help>UNIX socket used by workers for local scan requests.</help>
+    </field>
+</form>

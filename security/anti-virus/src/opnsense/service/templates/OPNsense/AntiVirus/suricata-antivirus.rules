@@ -1,0 +1,26 @@
+{% if helpers.exists('OPNsense.antivirus.general.enabled') and OPNsense.antivirus.general.enabled == '1' %}
+{% set extcsv = OPNsense.antivirus.general.extensions if helpers.exists('OPNsense.antivirus.general.extensions') else 'exe,dll,elf,sh,bin' %}
+{% set ext_list = extcsv.split(',') %}
+
+{% set sid = namespace(value=4200000) %}
+{% if helpers.exists('OPNsense.antivirus.general.scan_http') and OPNsense.antivirus.general.scan_http == '1' %}
+{% for ext in ext_list %}
+{% set sid.value = sid.value + 1 %}
+alert http any any -> any any (msg:"AV extract http {{ ext|trim|lower }}"; flow:established,to_client; fileext:"{{ ext|trim|lower }}"; filestore; sid:{{ sid.value }}; rev:1;)
+{% endfor %}
+{% endif %}
+
+{% if helpers.exists('OPNsense.antivirus.general.scan_ftp') and OPNsense.antivirus.general.scan_ftp == '1' %}
+{% for ext in ext_list %}
+{% set sid.value = sid.value + 1 %}
+alert ftp-data any any -> any any (msg:"AV extract ftp {{ ext|trim|lower }}"; flow:established,to_client; fileext:"{{ ext|trim|lower }}"; filestore; sid:{{ sid.value }}; rev:1;)
+{% endfor %}
+{% endif %}
+
+{% if helpers.exists('OPNsense.antivirus.general.scan_smb') and OPNsense.antivirus.general.scan_smb == '1' %}
+{% for ext in ext_list %}
+{% set sid.value = sid.value + 1 %}
+alert smb any any -> any any (msg:"AV extract smb {{ ext|trim|lower }}"; flow:established,to_client; fileext:"{{ ext|trim|lower }}"; filestore; sid:{{ sid.value }}; rev:1;)
+{% endfor %}
+{% endif %}
+{% endif %}

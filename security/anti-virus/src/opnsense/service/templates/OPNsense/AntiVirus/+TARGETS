@@ -1,0 +1,4 @@
+clamd.conf:/usr/local/etc/clamd.conf
+antivirusd.conf:/usr/local/etc/antivirusd.conf
+suricata-antivirus.rules:/usr/local/etc/suricata/rules/antivirus-extract.rules
+newsyslog.conf:/etc/newsyslog.conf.d/antivirus.conf

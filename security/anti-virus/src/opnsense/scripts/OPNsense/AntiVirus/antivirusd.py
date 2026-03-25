@@ -1,0 +1,390 @@
+#!/usr/local/bin/python3
+
+import argparse
+import hashlib
+import json
+import logging
+import os
+import queue
+import signal
+import socket
+import sqlite3
+import subprocess
+import sys
+import threading
+import time
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from typing import Dict, Optional, Set
+
+from watchdog.events import FileSystemEvent, FileSystemEventHandler
+from watchdog.observers import Observer
+
+
+def utc_now() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def sha256_file(path: str) -> str:
+    digest = hashlib.sha256()
+    with open(path, "rb") as file_handle:
+        for chunk in iter(lambda: file_handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def safe_remove(path: str) -> None:
+    try:
+        os.remove(path)
+    except FileNotFoundError:
+        pass
+    except OSError:
+        logging.exception("remove failed: %s", path)
+
+
+class HashCache:
+    def __init__(self, db_path: str, ttl_seconds: int, whitelist: Set[str]):
+        self.db_path = db_path
+        self.ttl_seconds = ttl_seconds
+        self.whitelist = {value.lower() for value in whitelist}
+        self._lock = threading.Lock()
+        self._init_db()
+
+    def _conn(self) -> sqlite3.Connection:
+        return sqlite3.connect(self.db_path, timeout=5)
+
+    def _init_db(self) -> None:
+        os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
+        with self._conn() as conn:
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS hash_cache (
+                    sha256 TEXT PRIMARY KEY,
+                    verdict TEXT NOT NULL,
+                    expires_at INTEGER NOT NULL,
+                    updated_at INTEGER NOT NULL
+                )
+                """
+            )
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_hash_cache_expires ON hash_cache(expires_at)")
+
+    def prune(self) -> None:
+        now = int(time.time())
+        with self._lock:
+            with self._conn() as conn:
+                conn.execute("DELETE FROM hash_cache WHERE expires_at < ?", (now,))
+
+    def is_whitelisted(self, digest: str) -> bool:
+        return digest.lower() in self.whitelist
+
+    def is_recent_safe(self, digest: str) -> bool:
+        now = int(time.time())
+        with self._lock:
+            with self._conn() as conn:
+                row = conn.execute(
+                    "SELECT verdict, expires_at FROM hash_cache WHERE sha256 = ?",
+                    (digest.lower(),),
+                ).fetchone()
+        return row is not None and row[0] == "safe" and int(row[1]) >= now
+
+    def mark_safe(self, digest: str) -> None:
+        now = int(time.time())
+        expires = now + self.ttl_seconds
+        with self._lock:
+            with self._conn() as conn:
+                conn.execute(
+                    """
+                    INSERT INTO hash_cache (sha256, verdict, expires_at, updated_at)
+                    VALUES (?, 'safe', ?, ?)
+                    ON CONFLICT(sha256) DO UPDATE SET verdict='safe', expires_at=excluded.expires_at, updated_at=excluded.updated_at
+                    """,
+                    (digest.lower(), expires, now),
+                )
+
+
+def scan_with_clamd(clamd_socket: str, file_path: str, timeout_seconds: int = 20) -> Dict[str, str]:
+    result = {"status": "error", "signature": ""}
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
+        client.settimeout(timeout_seconds)
+        client.connect(clamd_socket)
+        payload = f"SCAN {file_path}\n".encode("utf-8")
+        client.sendall(payload)
+
+        response = b""
+        while True:
+            chunk = client.recv(4096)
+            if not chunk:
+                break
+            response += chunk
+            if b"\n" in response:
+                break
+
+    text = response.decode("utf-8", errors="ignore").strip()
+    if text.endswith("OK"):
+        result["status"] = "clean"
+        return result
+
+    if "FOUND" in text:
+        result["status"] = "infected"
+        marker = ": "
+        if marker in text:
+            signature = text.split(marker, 1)[1].replace(" FOUND", "").strip()
+            result["signature"] = signature
+        return result
+
+    result["signature"] = text
+    return result
+
+
+def extract_source_ip(file_path: str) -> str:
+    sidecar = f"{file_path}.meta"
+    if os.path.exists(sidecar):
+        try:
+            with open(sidecar, "r", encoding="utf-8") as file_handle:
+                data = json.load(file_handle)
+            if isinstance(data, dict) and isinstance(data.get("source_ip"), str):
+                return data["source_ip"].strip()
+        except Exception:
+            logging.exception("failed to parse sidecar metadata: %s", sidecar)
+    return ""
+
+
+@dataclass
+class ScanTask:
+    file_path: str
+    digest: str
+    source_ip: str
+
+
+class ExtractEventHandler(FileSystemEventHandler):
+    def __init__(self, engine: "AntiVirusEngine"):
+        self.engine = engine
+
+    def on_created(self, event: FileSystemEvent) -> None:
+        if event.is_directory:
+            return
+        self.engine.enqueue_if_needed(event.src_path)
+
+
+class AntiVirusEngine:
+    def __init__(self, config: Dict[str, object]):
+        self.config = config
+        self.extract_dir = str(config.get("extract_dir", "/var/run/av_extract"))
+        self.max_file_size_bytes = int(config.get("max_file_size_mb", 10)) * 1024 * 1024
+        self.queue_size = int(config.get("queue_size", 50))
+        self.worker_threads = int(config.get("worker_threads", 4))
+        self.block_duration_seconds = int(config.get("block_duration_seconds", 3600))
+        self.clamd_socket = str(config.get("clamd_socket", "/var/run/clamav/clamd.sock"))
+        self.events_log = str(config.get("events_log", "/var/log/antivirus_events.log"))
+        self.stats_file = str(config.get("stats_file", "/var/run/antivirus/stats.json"))
+        self.task_queue: "queue.Queue[ScanTask]" = queue.Queue(maxsize=self.queue_size)
+        self.stop_event = threading.Event()
+        self.observer = Observer()
+        self.workers = []
+        self.stats_lock = threading.Lock()
+        self.stats = {
+            "started_at": utc_now(),
+            "queued": 0,
+            "scanned": 0,
+            "infected": 0,
+            "clean": 0,
+            "dropped_queue_full": 0,
+            "dropped_oversize": 0,
+            "dropped_cached": 0,
+            "dropped_errors": 0,
+            "blocked_ips": 0,
+        }
+
+        whitelist = set(config.get("whitelist", [])) if isinstance(config.get("whitelist", []), list) else set()
+        self.cache = HashCache(
+            db_path=str(config.get("cache_db", "/var/run/antivirus/hash_cache.db")),
+            ttl_seconds=int(config.get("cache_ttl_seconds", 86400)),
+            whitelist=whitelist,
+        )
+
+        os.makedirs(self.extract_dir, exist_ok=True)
+        os.makedirs(os.path.dirname(self.events_log), exist_ok=True)
+        os.makedirs(os.path.dirname(self.stats_file), exist_ok=True)
+
+    def update_stats(self, key: str, delta: int = 1) -> None:
+        with self.stats_lock:
+            self.stats[key] = int(self.stats.get(key, 0)) + delta
+            self.stats["updated_at"] = utc_now()
+            with open(self.stats_file, "w", encoding="utf-8") as file_handle:
+                json.dump(self.stats, file_handle, indent=2, ensure_ascii=False)
+
+    def write_event(self, payload: Dict[str, str]) -> None:
+        payload["timestamp"] = utc_now()
+        with open(self.events_log, "a", encoding="utf-8") as file_handle:
+            file_handle.write(json.dumps(payload, ensure_ascii=False) + "\n")
+
+    def enqueue_if_needed(self, file_path: str) -> None:
+        if not os.path.isfile(file_path):
+            return
+        if file_path.endswith(".meta"):
+            return
+
+        try:
+            size = os.path.getsize(file_path)
+            if size <= 0:
+                safe_remove(file_path)
+                return
+            if size > self.max_file_size_bytes:
+                self.update_stats("dropped_oversize")
+                safe_remove(file_path)
+                return
+
+            digest = sha256_file(file_path)
+            if self.cache.is_whitelisted(digest) or self.cache.is_recent_safe(digest):
+                self.update_stats("dropped_cached")
+                safe_remove(file_path)
+                return
+
+            task = ScanTask(file_path=file_path, digest=digest, source_ip=extract_source_ip(file_path))
+            try:
+                self.task_queue.put_nowait(task)
+                self.update_stats("queued")
+            except queue.Full:
+                self.update_stats("dropped_queue_full")
+                safe_remove(file_path)
+                logging.warning("scan queue full, dropping %s", file_path)
+        except Exception:
+            self.update_stats("dropped_errors")
+            logging.exception("enqueue failed for %s", file_path)
+            safe_remove(file_path)
+
+    def block_ip(self, source_ip: str) -> None:
+        if not source_ip:
+            return
+        try:
+            subprocess.run(
+                [
+                    "/usr/local/sbin/configctl",
+                    "antivirus",
+                    "block_ip",
+                    source_ip,
+                    str(self.block_duration_seconds),
+                ],
+                check=False,
+                timeout=10,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            self.update_stats("blocked_ips")
+        except Exception:
+            logging.exception("failed to block source ip %s", source_ip)
+
+    def worker_loop(self) -> None:
+        while not self.stop_event.is_set():
+            try:
+                task = self.task_queue.get(timeout=1)
+            except queue.Empty:
+                continue
+
+            verdict = {"status": "error", "signature": ""}
+            try:
+                verdict = scan_with_clamd(self.clamd_socket, task.file_path)
+                if verdict["status"] == "clean":
+                    self.cache.mark_safe(task.digest)
+                    self.update_stats("clean")
+                elif verdict["status"] == "infected":
+                    self.update_stats("infected")
+                    self.block_ip(task.source_ip)
+                else:
+                    self.update_stats("dropped_errors")
+
+                self.update_stats("scanned")
+                self.write_event(
+                    {
+                        "sha256": task.digest,
+                        "result": verdict["status"],
+                        "signature": verdict.get("signature", ""),
+                        "source_ip": task.source_ip,
+                        "file_path": task.file_path,
+                    }
+                )
+            except Exception:
+                self.update_stats("dropped_errors")
+                logging.exception("scan failed for %s", task.file_path)
+            finally:
+                safe_remove(task.file_path)
+                safe_remove(f"{task.file_path}.meta")
+                self.task_queue.task_done()
+
+    def start(self) -> None:
+        logging.info("antivirusd starting, dir=%s queue=%s workers=%s", self.extract_dir, self.queue_size, self.worker_threads)
+        self.cache.prune()
+        self.update_stats("queued", 0)
+
+        event_handler = ExtractEventHandler(self)
+        self.observer.schedule(event_handler, self.extract_dir, recursive=False)
+        self.observer.start()
+
+        for _ in range(self.worker_threads):
+            worker = threading.Thread(target=self.worker_loop, daemon=True)
+            worker.start()
+            self.workers.append(worker)
+
+    def stop(self) -> None:
+        self.stop_event.set()
+        try:
+            self.observer.stop()
+            self.observer.join(timeout=5)
+        except Exception:
+            logging.exception("observer stop failed")
+
+        for worker in self.workers:
+            worker.join(timeout=2)
+
+
+def load_config(path: str) -> Dict[str, object]:
+    with open(path, "r", encoding="utf-8") as file_handle:
+        data = json.load(file_handle)
+    if not isinstance(data, dict):
+        raise RuntimeError("invalid config format")
+    return data
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Industrial AntiVirus sidecar daemon")
+    parser.add_argument("-c", "--config", default="/usr/local/etc/antivirusd.conf")
+    args = parser.parse_args()
+
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(message)s",
+        handlers=[logging.StreamHandler(sys.stdout)],
+    )
+
+    try:
+        config = load_config(args.config)
+    except Exception as exc:
+        logging.error("failed to load config: %s", exc)
+        return 1
+
+    if not bool(config.get("enabled", False)):
+        logging.info("antivirusd disabled by config, exiting")
+        return 0
+
+    engine = AntiVirusEngine(config)
+    should_stop = threading.Event()
+
+    def on_signal(_signum, _frame):
+        should_stop.set()
+
+    signal.signal(signal.SIGTERM, on_signal)
+    signal.signal(signal.SIGINT, on_signal)
+
+    engine.start()
+    try:
+        while not should_stop.is_set():
+            time.sleep(1)
+    finally:
+        engine.stop()
+        logging.info("antivirusd stopped")
+
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
