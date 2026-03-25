@@ -7,6 +7,13 @@ use OPNsense\Base\ApiControllerBase;
 class AuditController extends ApiControllerBase
 {
     private const LOG_FILE = '/var/log/ndpi_audit.log';
+    private const EXPORT_HEADERS = [
+        'Content-Type: text/csv',
+        'Content-Transfer-Encoding: binary',
+        'Pragma: no-cache',
+        'Expires: 0',
+        'Content-Disposition: attachment; filename="appid-engine-records.csv"',
+    ];
 
     private function readTailLines(int $maxLines): array
     {
@@ -112,13 +119,61 @@ class AuditController extends ApiControllerBase
         }));
     }
 
-    public function liveAction()
+    private function requestString(string $name, string $default = ''): string
     {
-        $windowSeconds = max(5, min(3600, (int)$this->request->getQuery('window', 'int', 90)));
-        $limit = max(1, min(1000, (int)$this->request->getQuery('limit', 'int', 200)));
-        $now = time();
+        $value = $this->request->getPost($name, null, null);
+        if ($value === null || $value === '') {
+            $value = $this->request->getQuery($name, null, $default);
+        }
 
+        return is_scalar($value) ? trim((string)$value) : $default;
+    }
+
+    private function requestInt(string $name, int $default): int
+    {
+        $value = $this->request->getPost($name, 'int', null);
+        if ($value === null || $value === '') {
+            $value = $this->request->getQuery($name, 'int', $default);
+        }
+
+        return is_numeric($value) ? (int)$value : $default;
+    }
+
+    private function applySearchPhrase(array $records, string $searchPhrase, array $fields): array
+    {
+        if ($searchPhrase === '') {
+            return $records;
+        }
+
+        $clauses = preg_split('/\s+/', $searchPhrase);
+        return array_values(array_filter($records, function ($record) use ($clauses, $fields) {
+            foreach ($clauses as $clause) {
+                if ($clause === '') {
+                    continue;
+                }
+
+                $matched = false;
+                foreach ($fields as $field) {
+                    if (stripos((string)($record[$field] ?? ''), $clause) !== false) {
+                        $matched = true;
+                        break;
+                    }
+                }
+
+                if (!$matched) {
+                    return false;
+                }
+            }
+
+            return true;
+        }));
+    }
+
+    private function collectLiveRecords(int $windowSeconds, int $limit): array
+    {
+        $now = time();
         $recent = [];
+
         foreach (array_reverse($this->loadRecords(3000)) as $record) {
             $ts = strtotime($record['timestamp']);
             if ($ts === false || ($now - $ts) > $windowSeconds) {
@@ -132,21 +187,112 @@ class AuditController extends ApiControllerBase
             }
         }
 
-        return ['rows' => array_values($recent)];
+        return array_values($recent);
+    }
+
+    private function toExportRows(array $records): array
+    {
+        return array_map(function ($record) {
+            return [
+                'timestamp' => $record['timestamp'] ?? '',
+                'src_ip' => $record['src_ip'] ?? '',
+                'src_port' => $record['src_port'] ?? '',
+                'dst_ip' => $record['dst_ip'] ?? '',
+                'dst_port' => $record['dst_port'] ?? '',
+                'l4' => $record['protocol'] ?? '',
+                'application' => $record['application'] ?? '',
+                'category' => $record['category'] ?? '',
+            ];
+        }, $records);
+    }
+
+    public function liveAction()
+    {
+        $windowSeconds = max(5, min(3600, $this->requestInt('window', 90)));
+        $limit = max(1, min(1000, $this->requestInt('limit', 200)));
+
+        return ['rows' => $this->collectLiveRecords($windowSeconds, $limit)];
+    }
+
+    public function searchLiveAction()
+    {
+        $windowSeconds = max(5, min(3600, $this->requestInt('window', 120)));
+        $limit = max(1, min(5000, $this->requestInt('limit', 2000)));
+        $records = $this->collectLiveRecords($windowSeconds, $limit);
+
+        return $this->searchRecordsetBase(
+            $records,
+            ['timestamp', 'src_ip', 'src_port', 'dst_ip', 'dst_port', 'protocol', 'application', 'category']
+        );
     }
 
     public function searchAction()
     {
-        $ip = trim((string)$this->request->getQuery('ip', null, ''));
-        $app = trim((string)$this->request->getQuery('app', null, ''));
-        $start = trim((string)$this->request->getQuery('start', null, ''));
-        $end = trim((string)$this->request->getQuery('end', null, ''));
-        $limit = max(1, min(5000, (int)$this->request->getQuery('limit', 'int', 500)));
+        $ip = $this->requestString('ip');
+        $app = $this->requestString('app');
+        $start = $this->requestString('start');
+        $end = $this->requestString('end');
+        $limit = max(1, min(5000, $this->requestInt('limit', 500)));
 
         $records = $this->filterRecords($this->loadRecords(max($limit * 5, 3000)), $ip, $app, $start, $end);
         $records = array_slice(array_reverse($records), 0, $limit);
 
         return ['rows' => $records, 'total' => count($records)];
+    }
+
+    public function searchHistoryAction()
+    {
+        $ip = $this->requestString('ip');
+        $app = $this->requestString('app');
+        $start = $this->requestString('start');
+        $end = $this->requestString('end');
+        $limit = max(1, min(10000, $this->requestInt('limit', 5000)));
+
+        $records = $this->filterRecords($this->loadRecords(max($limit * 5, 4000)), $ip, $app, $start, $end);
+        $records = array_slice(array_reverse($records), 0, $limit);
+
+        return $this->searchRecordsetBase(
+            $records,
+            ['timestamp', 'src_ip', 'src_port', 'dst_ip', 'dst_port', 'protocol', 'application', 'category']
+        );
+    }
+
+    public function exportHistoryAction()
+    {
+        $ip = $this->requestString('ip');
+        $app = $this->requestString('app');
+        $start = $this->requestString('start');
+        $end = $this->requestString('end');
+        $limit = max(1, min(10000, $this->requestInt('limit', 5000)));
+        $searchPhrase = $this->requestString('searchPhrase');
+
+        $records = $this->filterRecords($this->loadRecords(max($limit * 5, 4000)), $ip, $app, $start, $end);
+        $records = array_slice(array_reverse($records), 0, $limit);
+        $records = $this->applySearchPhrase(
+            $records,
+            $searchPhrase,
+            ['timestamp', 'src_ip', 'src_port', 'dst_ip', 'dst_port', 'protocol', 'application', 'category']
+        );
+
+        $this->exportCsv($this->toExportRows($records), self::EXPORT_HEADERS);
+        return $this->response;
+    }
+
+    public function exportLiveAction()
+    {
+        $windowSeconds = max(5, min(3600, $this->requestInt('window', 120)));
+        $limit = max(1, min(5000, $this->requestInt('limit', 2000)));
+        $searchPhrase = $this->requestString('searchPhrase');
+
+        $records = $this->collectLiveRecords($windowSeconds, $limit);
+        $records = $this->applySearchPhrase(
+            $records,
+            $searchPhrase,
+            ['timestamp', 'src_ip', 'src_port', 'dst_ip', 'dst_port', 'protocol', 'application', 'category']
+        );
+
+        $this->exportCsv($this->toExportRows($records), self::EXPORT_HEADERS);
+        return $this->response;
     }
 
     public function statsAction()
