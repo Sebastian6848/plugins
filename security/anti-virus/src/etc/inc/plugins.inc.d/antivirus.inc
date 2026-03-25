@@ -18,10 +18,6 @@ function antivirus_firewall($fw)
         return;
     }
 
-    if (function_exists('add_alias_if_not_exist')) {
-        add_alias_if_not_exist(antivirus_block_table(), 'Industrial AV dynamic blocklist', 'Network');
-    }
-
     $fw->registerFilterRule(
         6000,
         [
@@ -29,7 +25,7 @@ function antivirus_firewall($fw)
             'quick' => true,
             'direction' => 'in',
             'ipprotocol' => 'inet46',
-            'from' => antivirus_block_table(),
+            'from' => '<' . antivirus_block_table() . '>',
             'log' => true,
             'descr' => 'AV-HOOK dynamic source block list',
         ]
