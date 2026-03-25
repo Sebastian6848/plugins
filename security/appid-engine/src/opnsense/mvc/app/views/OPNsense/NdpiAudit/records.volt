@@ -1,9 +1,61 @@
 <script>
     $(document).ready(function () {
         let liveTimer = null;
+        let liveRows = [];
+        let historyRows = [];
 
         const escapeHtml = function (value) {
             return $('<div/>').text(value == null ? '' : String(value)).html();
+        };
+
+        const filterRowsByPhrase = function (rows, phrase, columns) {
+            if (!phrase) {
+                return rows;
+            }
+            const token = phrase.toLowerCase();
+            return rows.filter(function (row) {
+                return columns.map(function (column) {
+                    return String(row[column] == null ? '' : row[column]);
+                }).join(' ').toLowerCase().indexOf(token) !== -1;
+            });
+        };
+
+        const exportCsv = function (filename, headers, rows, columns) {
+            const lines = [headers.join(',')];
+            rows.forEach(function (row) {
+                const cols = columns.map(function (column) {
+                    const text = String(row[column] == null ? '' : row[column]).replace(/"/g, '""');
+                    return '"' + text + '"';
+                });
+                lines.push(cols.join(','));
+            });
+
+            const blob = new Blob(["\uFEFF" + lines.join('\n')], {type: 'text/csv;charset=utf-8;'});
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = filename;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+        };
+
+        const attachFooterActions = function (tableSelector, exportButtonId, exportHandler) {
+            const footer = $(tableSelector + '-footer .pagination');
+            if (!footer.length || $(exportButtonId).length) {
+                return;
+            }
+
+            footer.before(
+                '<div class="btn-group btn-group-xs" style="margin-right:8px;">' +
+                '  <button id="' + exportButtonId.substring(1) + '" class="btn btn-default" type="button" title="{{ lang._("Export") }}">' +
+                '    <span class="fa fa-download"></span>' +
+                '  </button>' +
+                '</div>'
+            );
+
+            $(exportButtonId).on('click', exportHandler);
         };
 
         const initBootgrid = function (tableId, noResultsLabel, onLoaded) {
@@ -13,6 +65,7 @@
 
             $(tableId).bootgrid({
                 caseSensitive: false,
+                navigation: 3,
                 rowCount: [25, 50, 100, -1],
                 templates: {
                     search: '<div class="search form-group"><div class="input-group"><span class="icon input-group-addon fa fa-search"></span><input type="text" class="search-field form-control" placeholder="{{ lang._("Search") }}"></div></div>'
@@ -52,15 +105,27 @@
                     return;
                 }
 
+                liveRows = data.rows || [];
+
                 renderRows(
                     tbody,
-                    data.rows || [],
+                    liveRows,
                     ['timestamp', 'src_ip', 'src_port', 'dst_ip', 'dst_port', 'protocol', 'application', 'category'],
                     '{{ lang._("No active flows") }}'
                 );
 
                 initBootgrid('#ndpi-live-table', '{{ lang._("No active flows") }}', function () {
                     $('#ndpi-live-header-tools').detach().insertAfter('#ndpi-live-table-header .actionBar .actions');
+                    attachFooterActions('#ndpi-live-table', '#ndpi-live-export', function () {
+                        const phrase = ($('#ndpi-live-table-header .search-field').val() || '').trim();
+                        const rows = filterRowsByPhrase(liveRows, phrase, ['timestamp', 'src_ip', 'src_port', 'dst_ip', 'dst_port', 'protocol', 'application', 'category']);
+                        exportCsv(
+                            'appid-engine-live.csv',
+                            ['Timestamp', 'Src IP', 'Src Port', 'Dst IP', 'Dst Port', 'L4', 'Application', 'Category'],
+                            rows,
+                            ['timestamp', 'src_ip', 'src_port', 'dst_ip', 'dst_port', 'protocol', 'application', 'category']
+                        );
+                    });
                 });
             });
         };
@@ -106,15 +171,27 @@
                     return;
                 }
 
+                historyRows = data.rows || [];
+
                 renderRows(
                     tbody,
-                    data.rows || [],
+                    historyRows,
                     ['timestamp', 'src_ip', 'src_port', 'dst_ip', 'dst_port', 'protocol', 'application', 'category'],
                     '{{ lang._("No records matched current filters") }}'
                 );
 
                 initBootgrid('#ndpi-history-table', '{{ lang._("No records matched current filters") }}', function () {
                     $('#ndpi-history-header-tools').detach().insertAfter('#ndpi-history-table-header .actionBar .actions');
+                    attachFooterActions('#ndpi-history-table', '#ndpi-history-export', function () {
+                        const phrase = ($('#ndpi-history-table-header .search-field').val() || '').trim();
+                        const rows = filterRowsByPhrase(historyRows, phrase, ['timestamp', 'src_ip', 'src_port', 'dst_ip', 'dst_port', 'protocol', 'application', 'category']);
+                        exportCsv(
+                            'appid-engine-history.csv',
+                            ['Timestamp', 'Src IP', 'Src Port', 'Dst IP', 'Dst Port', 'L4', 'Application', 'Category'],
+                            rows,
+                            ['timestamp', 'src_ip', 'src_port', 'dst_ip', 'dst_port', 'protocol', 'application', 'category']
+                        );
+                    });
                 });
             });
         };
