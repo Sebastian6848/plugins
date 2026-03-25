@@ -8,10 +8,6 @@
                 <Default>0</Default>
                 <Required>Y</Required>
             </enabled>
-            <extract_dir type="TextField">
-                <Required>Y</Required>
-                <Default>/var/run/av_extract</Default>
-            </extract_dir>
             <max_file_size_mb type="IntegerField">
                 <Required>Y</Required>
                 <Default>10</Default>
@@ -42,36 +38,20 @@
                 <MinimumValue>60</MinimumValue>
                 <MaximumValue>2592000</MaximumValue>
             </block_duration_seconds>
-            <block_table type="TextField">
+            <monitored_protocols type="OptionField">
                 <Required>Y</Required>
-                <Default>industrial_av_block</Default>
-                <Mask>/^[A-Za-z0-9_\-]+$/</Mask>
-                <ValidationMessage>PF table name only accepts letters, digits, underscore and dash.</ValidationMessage>
-            </block_table>
-            <scan_http type="BooleanField">
-                <Default>1</Default>
-                <Required>Y</Required>
-            </scan_http>
-            <scan_ftp type="BooleanField">
-                <Default>1</Default>
-                <Required>Y</Required>
-            </scan_ftp>
-            <scan_smb type="BooleanField">
-                <Default>1</Default>
-                <Required>Y</Required>
-            </scan_smb>
-            <enforce_tls_baseline type="BooleanField">
-                <Default>1</Default>
-                <Required>Y</Required>
-            </enforce_tls_baseline>
+                <Multiple>Y</Multiple>
+                <Default>http,ftp,smb</Default>
+                <OptionValues>
+                    <http>HTTP</http>
+                    <ftp>FTP</ftp>
+                    <smb>SMB</smb>
+                </OptionValues>
+            </monitored_protocols>
             <extensions type="TextField">
                 <Required>Y</Required>
                 <Default>exe,dll,elf,sh,bin</Default>
             </extensions>
-            <clamd_socket type="TextField">
-                <Required>Y</Required>
-                <Default>/var/run/clamav/clamd.sock</Default>
-            </clamd_socket>
         </general>
         <whitelist>
             <entry type="ArrayField">

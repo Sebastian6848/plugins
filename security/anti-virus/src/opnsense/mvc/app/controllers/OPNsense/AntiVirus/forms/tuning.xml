@@ -1,0 +1,26 @@
+<form>
+    <field>
+        <id>antivirus.general.max_file_size_mb</id>
+        <label>Max File Size (MB)</label>
+        <type>text</type>
+        <help>Files larger than this limit are skipped immediately.</help>
+    </field>
+    <field>
+        <id>antivirus.general.worker_threads</id>
+        <label>Worker Threads</label>
+        <type>text</type>
+        <help>Concurrent clamd scanning workers.</help>
+    </field>
+    <field>
+        <id>antivirus.general.cache_ttl_seconds</id>
+        <label>Safe Cache TTL (seconds)</label>
+        <type>text</type>
+        <help>Safe hash cache retention window.</help>
+    </field>
+    <field>
+        <id>antivirus.general.queue_size</id>
+        <label>Scan Queue Size</label>
+        <type>text</type>
+        <help>Bounded queue size. Queue-full triggers fail-open (drop scan task, keep forwarding).</help>
+    </field>
+</form>

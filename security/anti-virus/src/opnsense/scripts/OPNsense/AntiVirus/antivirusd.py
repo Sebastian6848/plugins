@@ -157,12 +157,12 @@ class ScanTask:
 class AntiVirusEngine:
     def __init__(self, config: Dict[str, object]):
         self.config = config
-        self.extract_dir = str(config.get("extract_dir", "/var/run/av_extract"))
+        self.extract_dir = "/var/run/av_extract"
         self.max_file_size_bytes = int(config.get("max_file_size_mb", 10)) * 1024 * 1024
         self.queue_size = int(config.get("queue_size", 50))
         self.worker_threads = int(config.get("worker_threads", 4))
         self.block_duration_seconds = int(config.get("block_duration_seconds", 3600))
-        self.clamd_socket = str(config.get("clamd_socket", "/var/run/clamav/clamd.sock"))
+        self.clamd_socket = "/var/run/clamav/clamd.sock"
         self.events_log = str(config.get("events_log", "/var/log/antivirus_events.log"))
         self.stats_file = str(config.get("stats_file", "/var/run/antivirus/stats.json"))
         self.task_queue: "queue.Queue[ScanTask]" = queue.Queue(maxsize=self.queue_size)

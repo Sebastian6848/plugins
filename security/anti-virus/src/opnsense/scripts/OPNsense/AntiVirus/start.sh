@@ -6,7 +6,22 @@ set -eu
 ensure_dirs
 
 /usr/local/sbin/configctl template reload OPNsense/AntiVirus >/dev/null 2>&1 || true
-/usr/local/etc/rc.d/clamav_clamd start >/dev/null 2>&1 || true
+
+if [ -x /usr/local/opnsense/scripts/OPNsense/ClamAV/setup.sh ]; then
+    /bin/sh /usr/local/opnsense/scripts/OPNsense/ClamAV/setup.sh >/dev/null 2>&1 || true
+fi
+
+if [ -x /usr/local/etc/rc.d/clamav_clamd ]; then
+    /usr/local/etc/rc.d/clamav_clamd start >/dev/null 2>&1 || true
+else
+    /usr/local/sbin/configctl clamav start >/dev/null 2>&1 || true
+fi
+
+if [ ! -S /var/run/clamav/clamd.sock ]; then
+    echo "error: clamd socket missing (/var/run/clamav/clamd.sock), ClamAV engine is not running"
+    echo "hint: install/enable os-clamav plugin and verify /usr/local/etc/rc.d/clamav_clamd exists"
+    exit 1
+fi
 
 if is_running; then
     echo "antivirus already running"

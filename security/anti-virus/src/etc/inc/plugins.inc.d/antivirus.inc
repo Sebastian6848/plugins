@@ -9,14 +9,7 @@ function antivirus_enabled()
 
 function antivirus_block_table()
 {
-    global $config;
-
-    $table = $config['OPNsense']['antivirus']['general']['block_table'] ?? 'industrial_av_block';
-    if (!preg_match('/^[A-Za-z0-9_\-]+$/', $table)) {
-        $table = 'industrial_av_block';
-    }
-
-    return $table;
+    return 'industrial_av_block';
 }
 
 function antivirus_firewall($fw)
