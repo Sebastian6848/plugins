@@ -101,19 +101,6 @@
             }
         };
 
-        mapDataToFormUI({'frm_GeneralSettings': '/api/ndpiaudit/general/get'}).done(function () {
-            $('.selectpicker').selectpicker('refresh');
-            updateServiceControlUI('ndpiaudit');
-        });
-
-        $('#reconfigureAct').SimpleActionButton({
-            onPreAction: function () {
-                const deferred = $.Deferred();
-                saveFormToEndpoint('/api/ndpiaudit/general/set', 'frm_GeneralSettings', deferred.resolve, true, deferred.reject);
-                return deferred;
-            }
-        });
-
         $('#refreshLive').on('click', function () {
             refreshLive();
             refreshStats();
@@ -134,21 +121,13 @@
     });
 </script>
 
-<ul class="nav nav-tabs" data-tabs="tabs" id="maintabs">
-    <li class="active"><a data-toggle="tab" href="#tab_general">{{ lang._('Global Configuration') }}</a></li>
-    <li><a data-toggle="tab" href="#tab_live">{{ lang._('Live View & Category Statistics') }}</a></li>
-    <li><a data-toggle="tab" href="#tab_history">{{ lang._('History Search') }}</a></li>
+<ul class="nav nav-tabs" data-tabs="tabs" id="recordtabs">
+    <li class="active"><a data-toggle="tab" href="#tab_stats">{{ lang._('Statistics') }}</a></li>
+    <li><a data-toggle="tab" href="#tab_search">{{ lang._('Search') }}</a></li>
 </ul>
 
 <div class="tab-content content-box">
-    <div id="tab_general" class="tab-pane fade in active">
-        <div class="alert alert-info" style="margin-top: 10px;">
-            {{ lang._('Traffic is mirrored by pf dup-to to a loopback interface. Engine failures do not interrupt forwarding path.') }}
-        </div>
-        {{ partial('layout_partials/base_form', ['fields': generalForm, 'id': 'frm_GeneralSettings']) }}
-    </div>
-
-    <div id="tab_live" class="tab-pane fade in">
+    <div id="tab_stats" class="tab-pane fade in active">
         <div class="row" style="margin-top: 10px;">
             <div class="col-md-12">
                 <button class="btn btn-default btn-xs" id="refreshLive" type="button">
@@ -196,7 +175,7 @@
         </div>
     </div>
 
-    <div id="tab_history" class="tab-pane fade in">
+    <div id="tab_search" class="tab-pane fade in">
         <div class="row" style="margin-top: 10px;">
             <div class="col-md-2">
                 <label for="history_ip">{{ lang._('IP') }}</label>
@@ -246,5 +225,3 @@
         </div>
     </div>
 </div>
-
-{{ partial('layout_partials/base_apply_button', {'data_endpoint': '/api/ndpiaudit/service/reconfigure', 'data_service_widget': 'ndpiaudit'}) }}

@@ -1,0 +1,8 @@
+<menu>
+    <Firewall>
+        <NdpiAudit VisibleName="AppID Engine" cssClass="fa fa-bar-chart fa-fw">
+            <Configuration VisibleName="Configuration" url="/ui/ndpiaudit"/>
+            <Records VisibleName="Records" url="/ui/ndpiaudit/index/records"/>
+        </NdpiAudit>
+    </Firewall>
+</menu>

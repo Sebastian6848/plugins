@@ -36,4 +36,4 @@ if [ -n "${ENGINE_ARGS}" ]; then
     cmd="${cmd} ${ENGINE_ARGS}"
 fi
 
-exec /bin/sh -c "${cmd}" >> "${LOG_FILE}" 2>> /var/log/ndpi_audit.err
+exec /usr/bin/env NDPI_ACTION_MODE="${ACTION_MODE}" /bin/sh -c "${cmd}" >> "${LOG_FILE}" 2>> /var/log/ndpi_audit.err

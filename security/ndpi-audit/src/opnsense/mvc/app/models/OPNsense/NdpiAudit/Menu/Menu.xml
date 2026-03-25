@@ -1,7 +1,0 @@
-<menu>
-    <Firewall>
-        <NdpiAudit VisibleName="nDPI Audit" cssClass="fa fa-bar-chart fa-fw">
-            <Configuration VisibleName="Configuration" url="/ui/ndpiaudit"/>
-        </NdpiAudit>
-    </Firewall>
-</menu>
