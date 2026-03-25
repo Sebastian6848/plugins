@@ -6,6 +6,7 @@ import json
 import logging
 import os
 import queue
+import select
 import signal
 import socket
 import sqlite3
@@ -15,10 +16,7 @@ import threading
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Dict, Optional, Set
-
-from watchdog.events import FileSystemEvent, FileSystemEventHandler
-from watchdog.observers import Observer
+from typing import Dict, Set
 
 
 def utc_now() -> str:
@@ -156,16 +154,6 @@ class ScanTask:
     source_ip: str
 
 
-class ExtractEventHandler(FileSystemEventHandler):
-    def __init__(self, engine: "AntiVirusEngine"):
-        self.engine = engine
-
-    def on_created(self, event: FileSystemEvent) -> None:
-        if event.is_directory:
-            return
-        self.engine.enqueue_if_needed(event.src_path)
-
-
 class AntiVirusEngine:
     def __init__(self, config: Dict[str, object]):
         self.config = config
@@ -179,8 +167,11 @@ class AntiVirusEngine:
         self.stats_file = str(config.get("stats_file", "/var/run/antivirus/stats.json"))
         self.task_queue: "queue.Queue[ScanTask]" = queue.Queue(maxsize=self.queue_size)
         self.stop_event = threading.Event()
-        self.observer = Observer()
         self.workers = []
+        self.scan_thread: threading.Thread | None = None
+        self.kqueue: select.kqueue | None = None
+        self.kqueue_fd: int | None = None
+        self.known_files: Dict[str, tuple[int, int]] = {}
         self.stats_lock = threading.Lock()
         self.stats = {
             "started_at": utc_now(),
@@ -311,14 +302,100 @@ class AntiVirusEngine:
                 safe_remove(f"{task.file_path}.meta")
                 self.task_queue.task_done()
 
+    def scan_extract_dir(self) -> None:
+        current: Dict[str, tuple[int, int]] = {}
+        try:
+            with os.scandir(self.extract_dir) as entries:
+                for entry in entries:
+                    if not entry.is_file(follow_symlinks=False):
+                        continue
+                    if entry.name.endswith(".meta"):
+                        continue
+
+                    stat_result = entry.stat(follow_symlinks=False)
+                    marker = (int(stat_result.st_mtime_ns), int(stat_result.st_size))
+                    current[entry.path] = marker
+
+                    if self.known_files.get(entry.path) != marker:
+                        self.enqueue_if_needed(entry.path)
+        except FileNotFoundError:
+            os.makedirs(self.extract_dir, exist_ok=True)
+        except Exception:
+            logging.exception("failed to scan extract dir: %s", self.extract_dir)
+
+        self.known_files = current
+
+    def setup_kqueue(self) -> bool:
+        if not hasattr(select, "kqueue"):
+            logging.warning("kqueue not available, fallback to periodic directory scan")
+            return False
+
+        self.kqueue_fd = os.open(self.extract_dir, os.O_RDONLY)
+        self.kqueue = select.kqueue()
+
+        event = select.kevent(
+            self.kqueue_fd,
+            filter=select.KQ_FILTER_VNODE,
+            flags=select.KQ_EV_ADD | select.KQ_EV_ENABLE | select.KQ_EV_CLEAR,
+            fflags=(
+                select.KQ_NOTE_WRITE
+                | select.KQ_NOTE_EXTEND
+                | select.KQ_NOTE_ATTRIB
+                | select.KQ_NOTE_LINK
+                | select.KQ_NOTE_RENAME
+                | select.KQ_NOTE_DELETE
+            ),
+        )
+        self.kqueue.control([event], 0, 0)
+        return True
+
+    def event_loop(self) -> None:
+        while not self.stop_event.is_set():
+            if self.kqueue is None:
+                self.scan_extract_dir()
+                time.sleep(1)
+                continue
+
+            try:
+                events = self.kqueue.control(None, 1, 1)
+                if events:
+                    self.scan_extract_dir()
+                    for event in events:
+                        if event.fflags & (select.KQ_NOTE_DELETE | select.KQ_NOTE_RENAME):
+                            if self.kqueue_fd is not None:
+                                os.close(self.kqueue_fd)
+                            self.kqueue_fd = os.open(self.extract_dir, os.O_RDONLY)
+                            register = select.kevent(
+                                self.kqueue_fd,
+                                filter=select.KQ_FILTER_VNODE,
+                                flags=select.KQ_EV_ADD | select.KQ_EV_ENABLE | select.KQ_EV_CLEAR,
+                                fflags=(
+                                    select.KQ_NOTE_WRITE
+                                    | select.KQ_NOTE_EXTEND
+                                    | select.KQ_NOTE_ATTRIB
+                                    | select.KQ_NOTE_LINK
+                                    | select.KQ_NOTE_RENAME
+                                    | select.KQ_NOTE_DELETE
+                                ),
+                            )
+                            self.kqueue.control([register], 0, 0)
+                else:
+                    self.scan_extract_dir()
+            except FileNotFoundError:
+                os.makedirs(self.extract_dir, exist_ok=True)
+            except Exception:
+                logging.exception("kqueue event loop error")
+                time.sleep(1)
+
     def start(self) -> None:
         logging.info("antivirusd starting, dir=%s queue=%s workers=%s", self.extract_dir, self.queue_size, self.worker_threads)
         self.cache.prune()
         self.update_stats("queued", 0)
 
-        event_handler = ExtractEventHandler(self)
-        self.observer.schedule(event_handler, self.extract_dir, recursive=False)
-        self.observer.start()
+        self.scan_extract_dir()
+        self.setup_kqueue()
+        self.scan_thread = threading.Thread(target=self.event_loop, daemon=True)
+        self.scan_thread.start()
 
         for _ in range(self.worker_threads):
             worker = threading.Thread(target=self.worker_loop, daemon=True)
@@ -327,11 +404,19 @@ class AntiVirusEngine:
 
     def stop(self) -> None:
         self.stop_event.set()
+
+        if self.scan_thread is not None:
+            self.scan_thread.join(timeout=5)
+
         try:
-            self.observer.stop()
-            self.observer.join(timeout=5)
+            if self.kqueue is not None:
+                self.kqueue.close()
+                self.kqueue = None
+            if self.kqueue_fd is not None:
+                os.close(self.kqueue_fd)
+                self.kqueue_fd = None
         except Exception:
-            logging.exception("observer stop failed")
+            logging.exception("kqueue cleanup failed")
 
         for worker in self.workers:
             worker.join(timeout=2)
