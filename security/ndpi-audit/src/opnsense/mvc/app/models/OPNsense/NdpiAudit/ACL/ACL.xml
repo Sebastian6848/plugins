@@ -1,0 +1,9 @@
+<acl>
+    <page-ndpiaudit-user>
+        <name>Firewall: NdpiAudit</name>
+        <patterns>
+            <pattern>ui/ndpiaudit/*</pattern>
+            <pattern>api/ndpiaudit/*</pattern>
+        </patterns>
+    </page-ndpiaudit-user>
+</acl>

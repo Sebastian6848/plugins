@@ -1,0 +1,67 @@
+<model>
+    <mount>//OPNsense/ndpiaudit/general</mount>
+    <description>nDPI audit configuration</description>
+    <version>1.0.0</version>
+    <items>
+        <enabled type="BooleanField">
+            <Default>0</Default>
+            <Required>Y</Required>
+        </enabled>
+        <interfaces type="InterfaceField">
+            <Required>Y</Required>
+            <Multiple>Y</Multiple>
+            <AllowDynamic>Y</AllowDynamic>
+        </interfaces>
+        <mirror_interface type="TextField">
+            <Required>Y</Required>
+            <Default>lo1</Default>
+            <Mask>/^[A-Za-z0-9_\.:-]+$/</Mask>
+            <ValidationMessage>Please provide a valid interface name.</ValidationMessage>
+        </mirror_interface>
+        <mirror_direction type="OptionField">
+            <Required>Y</Required>
+            <Default>both</Default>
+            <OptionValues>
+                <in>Ingress Only</in>
+                <out>Egress Only</out>
+                <both>Ingress + Egress</both>
+            </OptionValues>
+        </mirror_direction>
+        <max_flows type="IntegerField">
+            <Required>Y</Required>
+            <Default>4096</Default>
+            <MinimumValue>128</MinimumValue>
+            <MaximumValue>1048576</MaximumValue>
+        </max_flows>
+        <max_packets_per_flow type="IntegerField">
+            <Required>Y</Required>
+            <Default>20</Default>
+            <MinimumValue>1</MinimumValue>
+            <MaximumValue>1024</MaximumValue>
+        </max_packets_per_flow>
+        <binary_path type="TextField">
+            <Required>N</Required>
+            <Default>/usr/local/bin/ndpiReader</Default>
+        </binary_path>
+        <json_output_arg type="TextField">
+            <Required>N</Required>
+            <Default>--audit-json</Default>
+        </json_output_arg>
+        <tls_fingerprint_db type="TextField">
+            <Required>N</Required>
+            <Default>/usr/local/share/ndpi/ja4_fingerprints.csv</Default>
+        </tls_fingerprint_db>
+        <tcp_fingerprint_db type="TextField">
+            <Required>N</Required>
+            <Default>/usr/local/share/ndpi/tcp_fingerprints.csv</Default>
+        </tcp_fingerprint_db>
+        <protocol_fingerprint_db type="TextField">
+            <Required>N</Required>
+            <Default>/usr/local/share/ndpi/protos.txt</Default>
+        </protocol_fingerprint_db>
+        <engine_args type="TextField">
+            <Required>N</Required>
+            <Default></Default>
+        </engine_args>
+    </items>
+</model>

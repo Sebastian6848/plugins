@@ -1,0 +1,3 @@
+ndpi-audit.conf:/usr/local/etc/ndpi-audit/ndpi-audit.conf
+mirror.rules:/usr/local/etc/ndpi-audit/mirror.rules
+newsyslog.conf:/etc/newsyslog.conf.d/ndpi-audit.conf

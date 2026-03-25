@@ -1,0 +1,75 @@
+<form>
+    <field>
+        <id>general.enabled</id>
+        <label>Enable nDPI Audit</label>
+        <type>checkbox</type>
+        <help>Enable mirrored traffic auditing engine.</help>
+    </field>
+    <field>
+        <id>general.interfaces</id>
+        <label>Mirror Interfaces</label>
+        <type>select_multiple</type>
+        <advanced>true</advanced>
+        <help>Select one or more interfaces to mirror.</help>
+    </field>
+    <field>
+        <id>general.mirror_interface</id>
+        <label>Mirror Loopback Interface</label>
+        <type>text</type>
+        <help>Dedicated capture interface, for example lo1.</help>
+    </field>
+    <field>
+        <id>general.mirror_direction</id>
+        <label>Mirror Direction</label>
+        <type>dropdown</type>
+        <help>Select ingress, egress, or both directions.</help>
+    </field>
+    <field>
+        <id>general.max_flows</id>
+        <label>Max Concurrent Flows</label>
+        <type>text</type>
+        <help>Upper limit for concurrently tracked flows.</help>
+    </field>
+    <field>
+        <id>general.max_packets_per_flow</id>
+        <label>Max Packets Per Flow</label>
+        <type>text</type>
+        <help>Selective DPI depth limit per flow.</help>
+    </field>
+    <field>
+        <id>general.binary_path</id>
+        <label>ndpiReader Binary Path</label>
+        <type>text</type>
+        <help>Path to ndpiReader executable. Default: /usr/local/bin/ndpiReader (bundled by this plugin).</help>
+    </field>
+    <field>
+        <id>general.json_output_arg</id>
+        <label>JSON Output Argument</label>
+        <type>text</type>
+        <help>Argument used to switch engine output to JSON line mode.</help>
+    </field>
+    <field>
+        <id>general.tls_fingerprint_db</id>
+        <label>TLS Fingerprint DB</label>
+        <type>text</type>
+        <help>Path to JA4 or TLS fingerprint database file. Default: /usr/local/share/ndpi/ja4_fingerprints.csv.</help>
+    </field>
+    <field>
+        <id>general.tcp_fingerprint_db</id>
+        <label>TCP Fingerprint DB</label>
+        <type>text</type>
+        <help>Path to TCP fingerprint database file. Default: /usr/local/share/ndpi/tcp_fingerprints.csv.</help>
+    </field>
+    <field>
+        <id>general.protocol_fingerprint_db</id>
+        <label>Protocol Fingerprint DB</label>
+        <type>text</type>
+        <help>Path to protocol fingerprint database file. Default: /usr/local/share/ndpi/protos.txt.</help>
+    </field>
+    <field>
+        <id>general.engine_args</id>
+        <label>Extra Engine Arguments</label>
+        <type>text</type>
+        <help>Optional extra CLI parameters passed to ndpiReader.</help>
+    </field>
+</form>

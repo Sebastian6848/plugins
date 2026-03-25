@@ -1,0 +1,6 @@
+#!/bin/sh
+
+/usr/local/sbin/configctl template reload OPNsense/NdpiAudit >/dev/null 2>&1
+/usr/local/sbin/configctl filter reload >/dev/null 2>&1
+/usr/local/sbin/configctl ndpiaudit mirror_reload >/dev/null 2>&1
+/usr/local/sbin/configctl ndpiaudit restart >/dev/null 2>&1
