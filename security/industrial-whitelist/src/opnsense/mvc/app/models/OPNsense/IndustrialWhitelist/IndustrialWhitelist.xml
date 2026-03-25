@@ -54,12 +54,16 @@
                 <AllowedFunctionCodes type="OptionField">
                     <Multiple>Y</Multiple>
                     <OptionValues>
-                        <read_only>Read Only (FC 1-4)</read_only>
-                        <write_single>Write Single (FC 5-6)</write_single>
-                        <write_multiple>Write Multiple (FC 15-16)</write_multiple>
-                        <diagnostic>Diagnostic (FC 8)</diagnostic>
+                        <read_only>Read Operations</read_only>
+                        <write_single>Write Operations (Single)</write_single>
+                        <write_multiple>Write Operations (Multiple/Bulk)</write_multiple>
+                        <diagnostic>Diagnostic / Session Operations</diagnostic>
                     </OptionValues>
                 </AllowedFunctionCodes>
+                <StrictDPI type="BooleanField">
+                    <Default>0</Default>
+                    <help>开启后，系统将严格校验应用层载荷。任何尝试通过此端口传输的非标或伪造协议（如 SSH/HTTP 伪装成 Modbus）将被直接丢弃（Drop）。关闭则仅告警（Alert）。</help>
+                </StrictDPI>
                 <description type="DescriptionField"/>
             </rule>
         </rules>

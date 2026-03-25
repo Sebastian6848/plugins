@@ -39,9 +39,15 @@
     </field>
     <field>
         <id>rule.AllowedFunctionCodes</id>
-        <label>Allowed Function Codes</label>
+        <label>Allowed Read/Write Controls</label>
         <type>select_multiple</type>
-        <help>Only used for L7-capable protocols (Modbus TCP, DNP3).</help>
+        <help>Only used for L7-capable protocols (Modbus TCP, DNP3, EtherNet/IP, MQTT).</help>
+    </field>
+    <field>
+        <id>rule.StrictDPI</id>
+        <label>Strict Protocol Enforcement (Drop forged traffic)</label>
+        <type>checkbox</type>
+        <help>Enable strict anti-spoof enforcement for supported L7 protocols.</help>
     </field>
     <field>
         <id>rule.description</id>

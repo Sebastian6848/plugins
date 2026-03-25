@@ -7,7 +7,7 @@ import xml.etree.ElementTree as ET
 CONFIG_PATH = '/conf/config.xml'
 OUTPUT_PATH = '/usr/local/etc/suricata/custom_industrial.rules'
 
-L7_PROTOCOLS = {'modbus_tcp', 'dnp3'}
+L7_PROTOCOLS = {'modbus_tcp', 'dnp3', 'eip', 'mqtt'}
 
 MODBUS_FUNCTION_MAP = {
     'read_only': ['1', '2', '3', '4'],
@@ -21,6 +21,20 @@ DNP3_FUNCTION_MAP = {
     'write_single': ['write', 'select', 'operate'],
     'write_multiple': ['direct_operate', 'direct_operate_nr'],
     'diagnostic': ['cold_restart', 'warm_restart'],
+}
+
+EIP_FUNCTION_MAP = {
+    'read_only': ['14', '76'],
+    'write_single': ['16', '77'],
+    'write_multiple': ['4', '10'],
+    'diagnostic': ['82'],
+}
+
+MQTT_FUNCTION_MAP = {
+    'read_only': ['SUBSCRIBE', 'UNSUBSCRIBE'],
+    'write_single': ['PUBLISH'],
+    'write_multiple': ['PUBLISH'],
+    'diagnostic': ['CONNECT', 'DISCONNECT', 'PINGREQ', 'PINGRESP'],
 }
 
 
@@ -65,8 +79,7 @@ def parse_rules():
             continue
 
         function_values = normalize_multi_value(item.findtext('AllowedFunctionCodes'))
-        if not function_values:
-            continue
+        strict_dpi = (item.findtext('StrictDPI') or '0').strip() in ('1', 'true', 'True', 'yes', 'on')
 
         parsed.append({
             'source': (item.findtext('source') or 'any').strip() or 'any',
@@ -74,6 +87,7 @@ def parse_rules():
             'protocol': protocol,
             'description': (item.findtext('description') or '').strip(),
             'allowed_function_codes': function_values,
+            'strict_dpi': strict_dpi,
         })
 
     return parsed
@@ -99,7 +113,14 @@ def normalize_suricata_ip(value):
 
 def map_protocol_functions(protocol, categories):
     values = []
-    mapping = MODBUS_FUNCTION_MAP if protocol == 'modbus_tcp' else DNP3_FUNCTION_MAP
+    protocol_mapping = {
+        'modbus_tcp': MODBUS_FUNCTION_MAP,
+        'dnp3': DNP3_FUNCTION_MAP,
+        'eip': EIP_FUNCTION_MAP,
+        'mqtt': MQTT_FUNCTION_MAP,
+    }
+
+    mapping = protocol_mapping.get(protocol, {})
 
     for category in categories:
         for code in mapping.get(category, []):
@@ -118,10 +139,24 @@ def render_pass_rule(protocol, src, dst, function_value, sid, description):
             f'modbus: function {function_value}; sid:{sid}; rev:1;)'
         )
 
+    if protocol == 'dnp3':
+        return (
+            f'pass dnp3 {src} any -> {dst} 20000 '
+            f'(msg:"IW L7 allow DNP3 function {function_value} ({short_desc})"; '
+            f'dnp3_func:{function_value}; sid:{sid}; rev:1;)'
+        )
+
+    if protocol == 'eip':
+        return (
+            f'pass tcp {src} any -> {dst} 44818 '
+            f'(msg:"IW L7 allow EIP/CIP service {function_value} ({short_desc})"; '
+            f'app-layer-protocol:enip; cip_service:{function_value}; sid:{sid}; rev:1;)'
+        )
+
     return (
-        f'pass dnp3 {src} any -> {dst} 20000 '
-        f'(msg:"IW L7 allow DNP3 function {function_value} ({short_desc})"; '
-        f'dnp3_func:{function_value}; sid:{sid}; rev:1;)'
+        f'pass tcp {src} any -> {dst} [1883,8883] '
+        f'(msg:"IW L7 allow MQTT type {function_value} ({short_desc})"; '
+        f'app-layer-protocol:mqtt; mqtt.type:{function_value}; sid:{sid}; rev:1;)'
     )
 
 
@@ -132,49 +167,75 @@ def render_drop_rule(protocol, src, dst, sid):
             f'(msg:"IW L7 blocked unauthorized Modbus command"; sid:{sid}; rev:1;)'
         )
 
+    if protocol == 'dnp3':
+        return (
+            f'drop dnp3 {src} any -> {dst} 20000 '
+            f'(msg:"IW L7 blocked unauthorized DNP3 command"; sid:{sid}; rev:1;)'
+        )
+
+    if protocol == 'eip':
+        return (
+            f'drop tcp {src} any -> {dst} [44818,2222] '
+            f'(msg:"IW L7 blocked unauthorized EIP/CIP operation"; app-layer-protocol:enip; sid:{sid}; rev:1;)'
+        )
+
     return (
-        f'drop dnp3 {src} any -> {dst} 20000 '
-        f'(msg:"IW L7 blocked unauthorized DNP3 command"; sid:{sid}; rev:1;)'
+        f'drop tcp {src} any -> {dst} [1883,8883] '
+        f'(msg:"IW L7 blocked unauthorized MQTT operation"; app-layer-protocol:mqtt; sid:{sid}; rev:1;)'
     )
 
 
-def render_spoof_guard_rules(start_sid):
-    return [
-        (
-            f'drop tcp any any -> any 502 '
-            f'(msg:"IW L7 blocked non-Modbus protocol on 502"; app-layer-protocol:!modbus; sid:{start_sid}; rev:1;)'
-        ),
-        (
-            f'drop tcp any any -> any 20000 '
-            f'(msg:"IW L7 blocked non-DNP3 protocol on 20000/tcp"; app-layer-protocol:!dnp3; sid:{start_sid + 1}; rev:1;)'
-        ),
-        (
-            f'drop udp any any -> any 20000 '
-            f'(msg:"IW L7 blocked non-DNP3 protocol on 20000/udp"; app-layer-protocol:!dnp3; sid:{start_sid + 2}; rev:1;)'
-        ),
-        (
-            f'drop tcp any any -> any 44818 '
-            f'(msg:"IW L7 blocked non-ENIP protocol on 44818"; app-layer-protocol:!enip; sid:{start_sid + 3}; rev:1;)'
-        ),
-        (
-            f'drop udp any any -> any 44818 '
-            f'(msg:"IW L7 blocked non-ENIP protocol on 44818/udp"; app-layer-protocol:!enip; sid:{start_sid + 4}; rev:1;)'
-        ),
-        (
-            f'drop tcp any any -> any 1883 '
-            f'(msg:"IW L7 blocked non-MQTT protocol on 1883"; app-layer-protocol:!mqtt; sid:{start_sid + 5}; rev:1;)'
-        ),
-        (
-            f'drop tcp any any -> any 8883 '
-            f'(msg:"IW L7 blocked non-MQTT protocol on 8883"; app-layer-protocol:!mqtt; sid:{start_sid + 6}; rev:1;)'
-        ),
-    ]
+def anti_spoof_tuples(protocol):
+    mapping = {
+        'modbus_tcp': [
+            {'proto': 'tcp', 'port': '502', 'app': 'modbus'},
+        ],
+        'dnp3': [
+            {'proto': 'tcp', 'port': '20000', 'app': 'dnp3'},
+            {'proto': 'udp', 'port': '20000', 'app': 'dnp3'},
+        ],
+        'eip': [
+            {'proto': 'tcp', 'port': '44818', 'app': 'enip'},
+            {'proto': 'udp', 'port': '44818', 'app': 'enip'},
+            {'proto': 'udp', 'port': '2222', 'app': 'enip'},
+        ],
+        'mqtt': [
+            {'proto': 'tcp', 'port': '1883', 'app': 'mqtt'},
+            {'proto': 'tcp', 'port': '8883', 'app': 'mqtt'},
+        ],
+    }
+
+    return mapping.get(protocol, [])
+
+
+def render_anti_spoof_rule(protocol, strict_dpi, sid, anti_spoof_seen):
+    action = 'drop' if strict_dpi else 'alert'
+    message_prefix = '[Industrial Whitelist] Blocked Forged Protocol on Port' if strict_dpi else '[Industrial Whitelist] Alert: Non-standard Protocol on Port'
+
+    rendered = []
+    for tuple_item in anti_spoof_tuples(protocol):
+        dedup_key = (action, tuple_item['proto'], tuple_item['port'], tuple_item['app'])
+        if dedup_key in anti_spoof_seen:
+            continue
+
+        anti_spoof_seen.add(dedup_key)
+        rendered.append(
+            (
+                f"{action} {tuple_item['proto']} any any -> any {tuple_item['port']} "
+                f"(msg:\"{message_prefix} {tuple_item['port']}\"; "
+                f"app-layer-protocol:!{tuple_item['app']}; sid:{sid}; rev:1;)"
+            )
+        )
+        sid += 1
+
+    return rendered, sid
 
 
 def generate_rules():
     compiled = []
     warnings = []
     sid = 1100000
+    anti_spoof_seen = set()
 
     for rule in parse_rules():
         src = normalize_suricata_ip(rule['source'])
@@ -186,17 +247,16 @@ def generate_rules():
             continue
 
         function_values = map_protocol_functions(rule['protocol'], rule['allowed_function_codes'])
-        if not function_values:
-            continue
-
         for function_value in function_values:
             compiled.append(render_pass_rule(rule['protocol'], src, dst, function_value, sid, rule['description']))
             sid += 1
 
-        compiled.append(render_drop_rule(rule['protocol'], src, dst, sid))
-        sid += 1
+        if function_values:
+            compiled.append(render_drop_rule(rule['protocol'], src, dst, sid))
+            sid += 1
 
-    compiled.extend(render_spoof_guard_rules(sid))
+        anti_spoof_rules, sid = render_anti_spoof_rule(rule['protocol'], rule['strict_dpi'], sid, anti_spoof_seen)
+        compiled.extend(anti_spoof_rules)
 
     return compiled, warnings
 

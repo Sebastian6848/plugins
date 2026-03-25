@@ -12,7 +12,7 @@ class RulesController extends ApiMutableModelControllerBase
 
     public function searchItemAction()
     {
-        return $this->searchBase('rules.rule', ['enabled', 'source', 'destination', 'protocol', 'AllowedFunctionCodes', 'description', 'sequence'], 'sequence');
+        return $this->searchBase('rules.rule', ['enabled', 'source', 'destination', 'protocol', 'AllowedFunctionCodes', 'StrictDPI', 'description', 'sequence'], 'sequence');
     }
 
     public function setItemAction($uuid)

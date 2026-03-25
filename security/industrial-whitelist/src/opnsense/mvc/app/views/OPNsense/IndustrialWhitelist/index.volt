@@ -1,7 +1,25 @@
 <script>
     $(document).ready(function () {
         const getMap = {'frm_settings': '/api/industrialwhitelist/settings/get'};
-        const l7Protocols = ['modbus_tcp', 'dnp3'];
+        const l7Protocols = ['modbus_tcp', 'dnp3', 'eip', 'mqtt'];
+        let applyAlertTimer = null;
+
+        const showApplyDangerAlert = function () {
+            const alertBox = $('#iw-apply-danger-alert');
+            if (!alertBox.length) {
+                return;
+            }
+
+            if (applyAlertTimer !== null) {
+                clearTimeout(applyAlertTimer);
+                applyAlertTimer = null;
+            }
+
+            alertBox.stop(true, true).fadeIn(120);
+            applyAlertTimer = setTimeout(function () {
+                alertBox.fadeOut(500);
+            }, 2800);
+        };
 
         const updateFunctionCodeFieldVisibility = function () {
             const dialog = $('#{{ formGridRule["edit_dialog_id"] }}');
@@ -27,12 +45,17 @@
             }
 
             if (l7Protocols.indexOf(selectedProtocol) >= 0) {
-                functionCodeGroup.show();
+                functionCodeInput.prop('disabled', false);
+                functionCodeGroup.removeClass('text-muted');
                 hintBox.hide();
             } else {
-                functionCodeGroup.hide();
+                functionCodeInput.val([]);
+                functionCodeInput.prop('disabled', true);
+                functionCodeGroup.addClass('text-muted');
                 hintBox.show();
             }
+
+            dialog.find('.selectpicker').selectpicker('refresh');
         };
 
         mapDataToFormUI(getMap).done(function () {
@@ -87,6 +110,10 @@
             }
         });
 
+        $('#reconfigureAct').on('click', function () {
+            showApplyDangerAlert();
+        });
+
         $(document).on('shown.bs.modal', '#{{ formGridRule["edit_dialog_id"] }}', function () {
             updateFunctionCodeFieldVisibility();
         });
@@ -104,7 +131,7 @@
 
 <div class="tab-content content-box">
     <div id="tab_general" class="tab-pane fade in active">
-        <div class="alert alert-danger" role="alert" style="margin-top: 10px;">
+        <div class="alert alert-danger" id="iw-apply-danger-alert" role="alert" style="margin-top: 10px; display: none;">
             {{ lang._('⚠️ This plugin has taken over the traffic scheduling of the industrial protocol at the underlying level. The rules of the native firewall regarding these two types of ports have been silently overwritten.') }}
         </div>
         <div class="alert alert-warning" role="alert" style="margin-top: 10px;">
