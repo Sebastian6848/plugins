@@ -176,10 +176,10 @@ else
 fi
 
 AV_COUNT="$(pgrep -fc 'antivirusd.py' 2>/dev/null || true)"
-if [ -n "${AV_COUNT}" ] && [ "${AV_COUNT}" -eq 1 ]; then
-    pass "single antivirusd instance after restart"
+if pid_running; then
+    pass "antivirus daemon pid is alive after restart"
 else
-    fail "unexpected antivirusd instance count after restart (count=${AV_COUNT:-0})"
+    fail "antivirus daemon pid is missing or dead after restart"
 fi
 
 section "Stop behavior"

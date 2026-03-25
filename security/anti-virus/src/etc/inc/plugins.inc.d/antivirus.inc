@@ -25,7 +25,6 @@ function antivirus_firewall($fw)
             'quick' => true,
             'direction' => 'in',
             'ipprotocol' => 'inet46',
-            'protocol' => 'any',
             'from' => '<' . antivirus_block_table() . '>',
             'to' => 'any',
             'log' => true,
