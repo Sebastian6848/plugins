@@ -1,8 +1,7 @@
 <script>
     $(document).ready(function () {
         mapDataToFormUI({
-            'frm_basic': '/api/antivirus/general/get',
-            'frm_tuning': '/api/antivirus/general/get'
+            'frm_general': '/api/antivirus/general/get'
         }).done(function () {
             $('.selectpicker').selectpicker('refresh');
         });
@@ -20,10 +19,8 @@
             onPreAction: function () {
                 const deferred = new $.Deferred();
 
-                saveFormToEndpoint('/api/antivirus/general/set', 'frm_basic', function () {
-                    saveFormToEndpoint('/api/antivirus/general/set', 'frm_tuning', function () {
-                        deferred.resolve();
-                    });
+                saveFormToEndpoint('/api/antivirus/general/set', 'frm_general', function () {
+                    deferred.resolve();
                 });
 
                 return deferred;
@@ -53,11 +50,7 @@
         <div class="alert alert-info" style="margin-top: 10px;">
             {{ lang._('Fail-open sidecar mode: forwarding path is never blocked. Only plaintext extraction traffic (HTTP/FTP/SMB) is scanned.') }}
         </div>
-        <h3>{{ lang._('Basic Policy') }}</h3>
-        {{ partial('layout_partials/base_form', ['fields': formBasic, 'id': 'frm_basic']) }}
-
-        <h3>{{ lang._('Engine Tuning') }}</h3>
-        {{ partial('layout_partials/base_form', ['fields': formTuning, 'id': 'frm_tuning']) }}
+        {{ partial('layout_partials/base_form', ['fields': formGeneral, 'id': 'frm_general']) }}
     </div>
     <div id="tab_hashes" class="tab-pane fade in">
         {{ partial('layout_partials/base_bootgrid_table', formGridHash) }}
