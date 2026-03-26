@@ -8,6 +8,10 @@
                 <Default>0</Default>
                 <Required>Y</Required>
             </enabled>
+            <enable_yara type="BooleanField">
+                <Default>0</Default>
+                <Required>Y</Required>
+            </enable_yara>
             <max_file_size_mb type="IntegerField">
                 <Required>Y</Required>
                 <Default>10</Default>

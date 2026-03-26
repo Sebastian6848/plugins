@@ -2,6 +2,7 @@
 
 import argparse
 import hashlib
+import importlib
 import json
 import logging
 import os
@@ -17,6 +18,11 @@ import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Dict, Set
+
+try:
+    yara_module = importlib.import_module("yara")
+except Exception:
+    yara_module = None
 
 
 def utc_now() -> str:
@@ -38,6 +44,16 @@ def safe_remove(path: str) -> None:
         pass
     except OSError:
         logging.exception("remove failed: %s", path)
+
+
+def parse_bool(value: object) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value != 0
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "on", "y"}
+    return False
 
 
 class HashCache:
@@ -134,6 +150,38 @@ def scan_with_clamd(clamd_socket: str, file_path: str, timeout_seconds: int = 20
     return result
 
 
+def scan_with_yara_cli(yara_bin: str, rules_path: str, file_path: str, timeout_seconds: int = 20) -> Dict[str, str]:
+    result = {"status": "error", "signature": ""}
+    try:
+        proc = subprocess.run(
+            [yara_bin, "-w", rules_path, file_path],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=timeout_seconds,
+        )
+    except Exception as exc:
+        result["signature"] = str(exc)
+        return result
+
+    stdout_text = (proc.stdout or "").strip()
+    stderr_text = (proc.stderr or "").strip()
+
+    if stdout_text:
+        first_line = stdout_text.splitlines()[0]
+        rule_name = first_line.split()[0].strip() if first_line else ""
+        result["status"] = "infected"
+        result["signature"] = rule_name or "yara_match"
+        return result
+
+    if proc.returncode in (0, 1) and not stderr_text:
+        result["status"] = "clean"
+        return result
+
+    result["signature"] = stderr_text or f"yara_exit_{proc.returncode}"
+    return result
+
+
 def extract_source_ip(file_path: str) -> str:
     sidecar = f"{file_path}.meta"
     if os.path.exists(sidecar):
@@ -165,6 +213,11 @@ class AntiVirusEngine:
         self.response_mode = str(config.get("response_mode", "block_ip")).strip().lower()
         if self.response_mode not in {"block_ip", "alert_only", "drop_only"}:
             self.response_mode = "block_ip"
+        self.enable_yara = parse_bool(config.get("enable_yara", False))
+        self.yara_rules_path = str(config.get("yara_rules_path", "/usr/local/share/antivirus/yara/signature-base.yar"))
+        self.yara_cli = "/usr/local/bin/yara"
+        self.yara_runtime = "disabled"
+        self.yara_compiled = None
         self.clamd_socket = "/var/run/clamav/clamd.sock"
         self.events_log = str(config.get("events_log", "/var/log/antivirus_events.log"))
         self.stats_file = str(config.get("stats_file", "/var/run/antivirus/stats.json"))
@@ -187,6 +240,7 @@ class AntiVirusEngine:
             "dropped_cached": 0,
             "dropped_errors": 0,
             "blocked_ips": 0,
+            "yara_infected": 0,
             "alert_only_actions": 0,
             "drop_only_actions": 0,
         }
@@ -201,6 +255,52 @@ class AntiVirusEngine:
         os.makedirs(self.extract_dir, exist_ok=True)
         os.makedirs(os.path.dirname(self.events_log), exist_ok=True)
         os.makedirs(os.path.dirname(self.stats_file), exist_ok=True)
+        self.init_yara_runtime()
+
+    def init_yara_runtime(self) -> None:
+        if not self.enable_yara:
+            return
+
+        if not os.path.isfile(self.yara_rules_path):
+            logging.warning("yara enabled but rules file missing: %s", self.yara_rules_path)
+            self.enable_yara = False
+            return
+
+        if yara_module is not None:
+            try:
+                self.yara_compiled = yara_module.compile(filepath=self.yara_rules_path)
+                self.yara_runtime = "python"
+                logging.info("yara runtime enabled via python module")
+                return
+            except Exception:
+                logging.exception("failed to compile yara rules via python module")
+
+        if os.path.isfile(self.yara_cli) and os.access(self.yara_cli, os.X_OK):
+            self.yara_runtime = "cli"
+            logging.info("yara runtime enabled via cli")
+            return
+
+        logging.warning("yara enabled but runtime unavailable (missing python yara module and cli binary)")
+        self.enable_yara = False
+
+    def scan_with_yara(self, file_path: str) -> Dict[str, str]:
+        if not self.enable_yara:
+            return {"status": "clean", "signature": ""}
+
+        if self.yara_runtime == "python" and self.yara_compiled is not None:
+            try:
+                matches = self.yara_compiled.match(file_path, timeout=20)
+                if matches:
+                    signature = ",".join([match.rule for match in matches[:3]])
+                    return {"status": "infected", "signature": signature or "yara_match"}
+                return {"status": "clean", "signature": ""}
+            except Exception as exc:
+                return {"status": "error", "signature": str(exc)}
+
+        if self.yara_runtime == "cli":
+            return scan_with_yara_cli(self.yara_cli, self.yara_rules_path, file_path)
+
+        return {"status": "error", "signature": "yara_runtime_unavailable"}
 
     def update_stats(self, key: str, delta: int = 1) -> None:
         with self.stats_lock:
@@ -289,12 +389,25 @@ class AntiVirusEngine:
             except queue.Empty:
                 continue
 
+            clamd_verdict = {"status": "error", "signature": ""}
+            yara_verdict = {"status": "skipped", "signature": ""}
             verdict = {"status": "error", "signature": ""}
+            detection_engine = "clamd"
             response_action = "none"
             try:
-                verdict = scan_with_clamd(self.clamd_socket, task.file_path)
+                clamd_verdict = scan_with_clamd(self.clamd_socket, task.file_path)
+                verdict = clamd_verdict
+
+                if self.enable_yara and clamd_verdict["status"] in {"clean", "error"}:
+                    yara_verdict = self.scan_with_yara(task.file_path)
+                    if yara_verdict["status"] == "infected":
+                        verdict = yara_verdict
+                        detection_engine = "yara"
+                        self.update_stats("yara_infected")
+
                 if verdict["status"] == "clean":
-                    self.cache.mark_safe(task.digest)
+                    if clamd_verdict["status"] == "clean" and yara_verdict["status"] in {"clean", "skipped"}:
+                        self.cache.mark_safe(task.digest)
                     self.update_stats("clean")
                 elif verdict["status"] == "infected":
                     self.update_stats("infected")
@@ -307,8 +420,11 @@ class AntiVirusEngine:
                     {
                         "sha256": task.digest,
                         "result": verdict["status"],
+                        "detection_engine": detection_engine,
                         "response_action": response_action,
                         "signature": verdict.get("signature", ""),
+                        "clamd_result": clamd_verdict.get("status", "error"),
+                        "yara_result": yara_verdict.get("status", "skipped"),
                         "source_ip": task.source_ip,
                         "file_path": task.file_path,
                     }
@@ -407,7 +523,14 @@ class AntiVirusEngine:
                 time.sleep(1)
 
     def start(self) -> None:
-        logging.info("antivirusd starting, dir=%s queue=%s workers=%s", self.extract_dir, self.queue_size, self.worker_threads)
+        logging.info(
+            "antivirusd starting, dir=%s queue=%s workers=%s yara_enabled=%s yara_runtime=%s",
+            self.extract_dir,
+            self.queue_size,
+            self.worker_threads,
+            self.enable_yara,
+            self.yara_runtime,
+        )
         self.cache.prune()
         self.update_stats("queued", 0)
 

@@ -10,6 +10,12 @@
 		<help>Enable industrial sidecar antivirus service.</help>
 	</field>
 	<field>
+		<id>antivirus.general.enable_yara</id>
+		<label>Enable YARA Scan</label>
+		<type>checkbox</type>
+		<help>Enable additional YARA rules scan using bundled ICS/OT signature set.</help>
+	</field>
+	<field>
 		<id>antivirus.general.monitored_protocols</id>
 		<label>Monitored Protocols</label>
 		<type>select_multiple</type>
