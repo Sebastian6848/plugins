@@ -157,12 +157,15 @@ class ScanTask:
 class AntiVirusEngine:
     def __init__(self, config: Dict[str, object]):
         self.config = config
-        self.extract_dir = str(config.get("extract_dir", "/var/run/av_extract"))
+        self.extract_dir = "/var/run/av_extract"
         self.max_file_size_bytes = int(config.get("max_file_size_mb", 10)) * 1024 * 1024
         self.queue_size = int(config.get("queue_size", 50))
         self.worker_threads = int(config.get("worker_threads", 4))
         self.block_duration_seconds = int(config.get("block_duration_seconds", 3600))
-        self.clamd_socket = str(config.get("clamd_socket", "/var/run/clamav/clamd.sock"))
+        self.response_mode = str(config.get("response_mode", "block_ip")).strip().lower()
+        if self.response_mode not in {"block_ip", "alert_only", "drop_only"}:
+            self.response_mode = "block_ip"
+        self.clamd_socket = "/var/run/clamav/clamd.sock"
         self.events_log = str(config.get("events_log", "/var/log/antivirus_events.log"))
         self.stats_file = str(config.get("stats_file", "/var/run/antivirus/stats.json"))
         self.task_queue: "queue.Queue[ScanTask]" = queue.Queue(maxsize=self.queue_size)
@@ -184,6 +187,8 @@ class AntiVirusEngine:
             "dropped_cached": 0,
             "dropped_errors": 0,
             "blocked_ips": 0,
+            "alert_only_actions": 0,
+            "drop_only_actions": 0,
         }
 
         whitelist = set(config.get("whitelist", [])) if isinstance(config.get("whitelist", []), list) else set()
@@ -265,6 +270,18 @@ class AntiVirusEngine:
         except Exception:
             logging.exception("failed to block source ip %s", source_ip)
 
+    def handle_infected(self, source_ip: str) -> str:
+        if self.response_mode == "alert_only":
+            self.update_stats("alert_only_actions")
+            return "alert_only"
+
+        if self.response_mode == "drop_only":
+            self.update_stats("drop_only_actions")
+            return "drop_only"
+
+        self.block_ip(source_ip)
+        return "block_ip"
+
     def worker_loop(self) -> None:
         while not self.stop_event.is_set():
             try:
@@ -273,6 +290,7 @@ class AntiVirusEngine:
                 continue
 
             verdict = {"status": "error", "signature": ""}
+            response_action = "none"
             try:
                 verdict = scan_with_clamd(self.clamd_socket, task.file_path)
                 if verdict["status"] == "clean":
@@ -280,7 +298,7 @@ class AntiVirusEngine:
                     self.update_stats("clean")
                 elif verdict["status"] == "infected":
                     self.update_stats("infected")
-                    self.block_ip(task.source_ip)
+                    response_action = self.handle_infected(task.source_ip)
                 else:
                     self.update_stats("dropped_errors")
 
@@ -289,6 +307,7 @@ class AntiVirusEngine:
                     {
                         "sha256": task.digest,
                         "result": verdict["status"],
+                        "response_action": response_action,
                         "signature": verdict.get("signature", ""),
                         "source_ip": task.source_ip,
                         "file_path": task.file_path,

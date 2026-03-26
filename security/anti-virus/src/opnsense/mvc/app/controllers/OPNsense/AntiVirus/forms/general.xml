@@ -27,6 +27,12 @@
 		<type>text</type>
 		<help>Temporary source block duration after malware detection.</help>
 	</field>
+	<field>
+		<id>antivirus.general.response_mode</id>
+		<label>Threat Response</label>
+		<type>dropdown</type>
+		<help>Choose how infected files are handled: block source IP, alert only, or drop sample only.</help>
+	</field>
 
 	<field>
 		<type>header</type>

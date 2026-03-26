@@ -55,4 +55,40 @@ class ServiceController extends ApiMutableServiceControllerBase
 
         return ['status' => 'ok', 'message' => $result];
     }
+
+    public function listBlocksAction()
+    {
+        $backend = new Backend();
+        $output = trim($backend->configdRun('antivirus list_blocks'));
+
+        $items = [];
+        if ($output !== '') {
+            foreach (preg_split('/\r\n|\r|\n/', $output) as $line) {
+                $ip = trim((string)$line);
+                if ($ip === '') {
+                    continue;
+                }
+                $items[] = ['ip' => $ip];
+            }
+        }
+
+        return ['status' => 'ok', 'items' => $items, 'count' => count($items)];
+    }
+
+    public function unblockIpAction()
+    {
+        if (!$this->request->isPost()) {
+            return ['status' => 'failed'];
+        }
+
+        $ip = trim((string)$this->request->getPost('ip', null, ''));
+        if ($ip === '' || filter_var($ip, FILTER_VALIDATE_IP) === false) {
+            return ['status' => 'failed', 'message' => 'invalid ip'];
+        }
+
+        $backend = new Backend();
+        $result = trim($backend->configdpRun('antivirus unblock_ip', [$ip]));
+
+        return ['status' => 'ok', 'message' => $result];
+    }
 }
