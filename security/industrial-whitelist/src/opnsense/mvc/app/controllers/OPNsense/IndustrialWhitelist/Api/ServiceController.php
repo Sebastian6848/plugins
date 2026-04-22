@@ -5,6 +5,7 @@ namespace OPNsense\IndustrialWhitelist\Api;
 use OPNsense\Base\ApiControllerBase;
 use OPNsense\Core\Backend;
 use OPNsense\Core\Config;
+use OPNsense\IndustrialWhitelist\IndustrialWhitelist;
 
 class ServiceController extends ApiControllerBase
 {
@@ -20,19 +21,10 @@ class ServiceController extends ApiControllerBase
 
     private function persistRevision(string $revision): void
     {
-        $config = Config::getInstance()->object();
-        if (empty($config['OPNsense'])) {
-            $config['OPNsense'] = [];
-        }
-        if (empty($config['OPNsense']['IndustrialWhitelist'])) {
-            $config['OPNsense']['IndustrialWhitelist'] = [];
-        }
-        if (empty($config['OPNsense']['IndustrialWhitelist']['general'])) {
-            $config['OPNsense']['IndustrialWhitelist']['general'] = [];
-        }
-
-        $config['OPNsense']['IndustrialWhitelist']['general']['last_apply_revision'] = $revision;
-        $config['OPNsense']['IndustrialWhitelist']['general']['last_apply_timestamp'] = gmdate('c');
+        $model = new IndustrialWhitelist();
+        $model->general->last_apply_revision = $revision;
+        $model->general->last_apply_timestamp = gmdate('c');
+        $model->serializeToConfig();
         Config::getInstance()->save();
     }
 
