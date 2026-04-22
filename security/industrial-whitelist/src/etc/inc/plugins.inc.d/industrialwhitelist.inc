@@ -85,6 +85,7 @@ function industrialwhitelist_firewall($fw)
 
     $general = $config['OPNsense']['IndustrialWhitelist']['general'] ?? [];
     $rules = $config['OPNsense']['IndustrialWhitelist']['rules']['rule'] ?? [];
+    $revision = (string)($general['last_apply_revision'] ?? 'unknown');
 
     if (!is_array($rules)) {
         $rules = [];
@@ -123,7 +124,7 @@ function industrialwhitelist_firewall($fw)
                     'to' => industrialwhitelist_address((string)($rule['destination'] ?? 'any')),
                     'to_port' => (string)$tuple['port'],
                     'log' => false,
-                    'descr' => 'IW-HOOK industrialwhitelist allow ' . $protocol . ' ' . $tuple['proto'] . '/' . $tuple['port'] . ' ' . (string)($rule['description'] ?? ''),
+                    'descr' => 'IW-HOOK industrialwhitelist rev:' . $revision . ' allow ' . $protocol . ' ' . $tuple['proto'] . '/' . $tuple['port'] . ' ' . (string)($rule['description'] ?? ''),
                 ]
             );
         }
@@ -152,7 +153,7 @@ function industrialwhitelist_firewall($fw)
                 'to' => 'any',
                 'to_port' => (string)$tuple['port'],
                 'log' => true,
-                'descr' => 'IW-HOOK industrialwhitelist default ' . $defaultAction . ' ' . $tuple['proto'] . '/' . $tuple['port'],
+                'descr' => 'IW-HOOK industrialwhitelist rev:' . $revision . ' default ' . $defaultAction . ' ' . $tuple['proto'] . '/' . $tuple['port'],
             ]
         );
     }

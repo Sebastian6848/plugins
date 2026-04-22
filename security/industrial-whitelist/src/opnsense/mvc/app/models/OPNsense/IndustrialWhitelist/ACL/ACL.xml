@@ -6,6 +6,7 @@
             <pattern>api/industrialwhitelist/settings/*</pattern>
             <pattern>api/industrialwhitelist/rules/*</pattern>
             <pattern>api/industrialwhitelist/service/*</pattern>
+            <pattern>api/industrialwhitelist/logs/*</pattern>
             <pattern>ui/diagnostics/log/core/filter*</pattern>
         </patterns>
     </page-industrialwhitelist-user>

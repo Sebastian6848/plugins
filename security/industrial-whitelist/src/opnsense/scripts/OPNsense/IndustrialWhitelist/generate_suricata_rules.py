@@ -2,12 +2,14 @@
 
 import ipaddress
 import os
+import tempfile
 import xml.etree.ElementTree as ET
 
 CONFIG_PATH = '/conf/config.xml'
 OUTPUT_PATH = '/usr/local/etc/suricata/custom_industrial.rules'
 
 L7_PROTOCOLS = {'modbus_tcp', 'dnp3', 'eip', 'mqtt'}
+CANONICAL_CATEGORY_ORDER = ['read_only', 'write_single', 'write_multiple', 'diagnostic']
 
 MODBUS_FUNCTION_MAP = {
     'read_only': ['1', '2', '3', '4'],
@@ -80,8 +82,13 @@ def parse_rules():
 
         function_values = normalize_multi_value(item.findtext('AllowedFunctionCodes'))
         strict_dpi = (item.findtext('StrictDPI') or '0').strip() in ('1', 'true', 'True', 'yes', 'on')
+        try:
+            sequence = int((item.findtext('sequence') or '99999').strip())
+        except ValueError:
+            sequence = 99999
 
         parsed.append({
+            'sequence': sequence,
             'source': (item.findtext('source') or 'any').strip() or 'any',
             'destination': (item.findtext('destination') or 'any').strip() or 'any',
             'protocol': protocol,
@@ -90,7 +97,35 @@ def parse_rules():
             'strict_dpi': strict_dpi,
         })
 
+    parsed.sort(
+        key=lambda row: (
+            row['sequence'],
+            row['protocol'],
+            row['source'],
+            row['destination'],
+            row['description'],
+        )
+    )
+
     return parsed
+
+
+def parse_apply_metadata():
+    revision = ''
+    timestamp = ''
+
+    if not os.path.exists(CONFIG_PATH):
+        return revision, timestamp
+
+    tree = ET.parse(CONFIG_PATH)
+    root = tree.getroot()
+    general = root.find('./OPNsense/IndustrialWhitelist/general')
+    if general is None:
+        return revision, timestamp
+
+    revision = (general.findtext('last_apply_revision') or '').strip()
+    timestamp = (general.findtext('last_apply_timestamp') or '').strip()
+    return revision, timestamp
 
 
 def normalize_suricata_ip(value):
@@ -122,7 +157,10 @@ def map_protocol_functions(protocol, categories):
 
     mapping = protocol_mapping.get(protocol, {})
 
-    for category in categories:
+    selected = set(categories)
+    for category in CANONICAL_CATEGORY_ORDER:
+        if category not in selected:
+            continue
         for code in mapping.get(category, []):
             if code not in values:
                 values.append(code)
@@ -130,58 +168,63 @@ def map_protocol_functions(protocol, categories):
     return values
 
 
-def render_pass_rule(protocol, src, dst, function_value, sid, description):
+def build_msg(revision, text):
+    tag = revision if revision else 'unknown'
+    return f'[IndustrialWhitelist][rev:{tag}] {text}'
+
+
+def render_pass_rule(protocol, src, dst, function_value, sid, description, revision):
     short_desc = description if description else 'rule'
     if protocol == 'modbus_tcp':
         return (
             f'pass modbus {src} any -> {dst} 502 '
-            f'(msg:"IW L7 allow Modbus function {function_value} ({short_desc})"; '
+            f'(msg:"{build_msg(revision, f"L7 allow Modbus function {function_value} ({short_desc})")}"; '
             f'modbus: function {function_value}; sid:{sid}; rev:1;)'
         )
 
     if protocol == 'dnp3':
         return (
             f'pass dnp3 {src} any -> {dst} 20000 '
-            f'(msg:"IW L7 allow DNP3 function {function_value} ({short_desc})"; '
+            f'(msg:"{build_msg(revision, f"L7 allow DNP3 function {function_value} ({short_desc})")}"; '
             f'dnp3_func:{function_value}; sid:{sid}; rev:1;)'
         )
 
     if protocol == 'eip':
         return (
             f'pass tcp {src} any -> {dst} 44818 '
-            f'(msg:"IW L7 allow EIP/CIP service {function_value} ({short_desc})"; '
+            f'(msg:"{build_msg(revision, f"L7 allow EIP/CIP service {function_value} ({short_desc})")}"; '
             f'app-layer-protocol:enip; cip_service:{function_value}; sid:{sid}; rev:1;)'
         )
 
     return (
         f'pass tcp {src} any -> {dst} [1883,8883] '
-        f'(msg:"IW L7 allow MQTT type {function_value} ({short_desc})"; '
+        f'(msg:"{build_msg(revision, f"L7 allow MQTT type {function_value} ({short_desc})")}"; '
         f'app-layer-protocol:mqtt; mqtt.type:{function_value}; sid:{sid}; rev:1;)'
     )
 
 
-def render_drop_rule(protocol, src, dst, sid):
+def render_drop_rule(protocol, src, dst, sid, revision):
     if protocol == 'modbus_tcp':
         return (
             f'drop modbus {src} any -> {dst} 502 '
-            f'(msg:"IW L7 blocked unauthorized Modbus command"; sid:{sid}; rev:1;)'
+            f'(msg:"{build_msg(revision, "L7 blocked unauthorized Modbus command")}"; sid:{sid}; rev:1;)'
         )
 
     if protocol == 'dnp3':
         return (
             f'drop dnp3 {src} any -> {dst} 20000 '
-            f'(msg:"IW L7 blocked unauthorized DNP3 command"; sid:{sid}; rev:1;)'
+            f'(msg:"{build_msg(revision, "L7 blocked unauthorized DNP3 command")}"; sid:{sid}; rev:1;)'
         )
 
     if protocol == 'eip':
         return (
             f'drop tcp {src} any -> {dst} [44818,2222] '
-            f'(msg:"IW L7 blocked unauthorized EIP/CIP operation"; app-layer-protocol:enip; sid:{sid}; rev:1;)'
+            f'(msg:"{build_msg(revision, "L7 blocked unauthorized EIP/CIP operation")}"; app-layer-protocol:enip; sid:{sid}; rev:1;)'
         )
 
     return (
         f'drop tcp {src} any -> {dst} [1883,8883] '
-        f'(msg:"IW L7 blocked unauthorized MQTT operation"; app-layer-protocol:mqtt; sid:{sid}; rev:1;)'
+        f'(msg:"{build_msg(revision, "L7 blocked unauthorized MQTT operation")}"; app-layer-protocol:mqtt; sid:{sid}; rev:1;)'
     )
 
 
@@ -208,22 +251,29 @@ def anti_spoof_tuples(protocol):
     return mapping.get(protocol, [])
 
 
-def render_anti_spoof_rule(protocol, strict_dpi, sid, anti_spoof_seen):
-    action = 'drop' if strict_dpi else 'alert'
-    message_prefix = '[Industrial Whitelist] Blocked Forged Protocol on Port' if strict_dpi else '[Industrial Whitelist] Alert: Non-standard Protocol on Port'
+def merge_anti_spoof_policy(policy, protocol, strict_dpi):
+    wanted_action = 'drop' if strict_dpi else 'alert'
 
-    rendered = []
     for tuple_item in anti_spoof_tuples(protocol):
-        dedup_key = (action, tuple_item['proto'], tuple_item['port'], tuple_item['app'])
-        if dedup_key in anti_spoof_seen:
+        key = (tuple_item['proto'], tuple_item['port'], tuple_item['app'])
+        previous = policy.get(key)
+        if previous == 'drop':
             continue
+        if previous is None or wanted_action == 'drop':
+            policy[key] = wanted_action
 
-        anti_spoof_seen.add(dedup_key)
+
+def render_anti_spoof_rules(policy, sid, revision):
+    rendered = []
+    sorted_items = sorted(policy.items(), key=lambda entry: (entry[0][0], int(entry[0][1]), entry[0][2]))
+
+    for (proto, port, app), action in sorted_items:
+        message_prefix = '[Industrial Whitelist] Blocked Forged Protocol on Port' if action == 'drop' else '[Industrial Whitelist] Alert: Non-standard Protocol on Port'
         rendered.append(
             (
-                f"{action} {tuple_item['proto']} any any -> any {tuple_item['port']} "
-                f"(msg:\"{message_prefix} {tuple_item['port']}\"; "
-                f"app-layer-protocol:!{tuple_item['app']}; sid:{sid}; rev:1;)"
+                f"{action} {proto} any any -> any {port} "
+                f"(msg:\"{build_msg(revision, f'{message_prefix} {port}')}\"; "
+                f"app-layer-protocol:!{app}; sid:{sid}; rev:1;)"
             )
         )
         sid += 1
@@ -231,11 +281,13 @@ def render_anti_spoof_rule(protocol, strict_dpi, sid, anti_spoof_seen):
     return rendered, sid
 
 
-def generate_rules():
+def generate_rules(revision):
     compiled = []
     warnings = []
     sid = 1100000
-    anti_spoof_seen = set()
+    anti_spoof_policy = {}
+    pass_seen = set()
+    deny_seen = set()
 
     for rule in parse_rules():
         src = normalize_suricata_ip(rule['source'])
@@ -248,34 +300,60 @@ def generate_rules():
 
         function_values = map_protocol_functions(rule['protocol'], rule['allowed_function_codes'])
         for function_value in function_values:
-            compiled.append(render_pass_rule(rule['protocol'], src, dst, function_value, sid, rule['description']))
+            pass_key = (rule['protocol'], src, dst, function_value)
+            if pass_key in pass_seen:
+                continue
+
+            pass_seen.add(pass_key)
+            compiled.append(render_pass_rule(rule['protocol'], src, dst, function_value, sid, rule['description'], revision))
             sid += 1
 
         if function_values:
-            compiled.append(render_drop_rule(rule['protocol'], src, dst, sid))
-            sid += 1
+            deny_key = (rule['protocol'], src, dst)
+            if deny_key not in deny_seen:
+                deny_seen.add(deny_key)
+                compiled.append(render_drop_rule(rule['protocol'], src, dst, sid, revision))
+                sid += 1
 
-        anti_spoof_rules, sid = render_anti_spoof_rule(rule['protocol'], rule['strict_dpi'], sid, anti_spoof_seen)
-        compiled.extend(anti_spoof_rules)
+        merge_anti_spoof_policy(anti_spoof_policy, rule['protocol'], rule['strict_dpi'])
+
+    anti_spoof_rules, sid = render_anti_spoof_rules(anti_spoof_policy, sid, revision)
+    compiled.extend(anti_spoof_rules)
 
     return compiled, warnings
 
 
-def write_output(lines):
+def validate_compiled_rules(lines):
+    for index, line in enumerate(lines):
+        if line.count('(') != line.count(')'):
+            raise ValueError(f'unbalanced parentheses in rule line {index + 1}')
+        if 'sid:' not in line:
+            raise ValueError(f'missing sid in rule line {index + 1}')
+
+
+def write_output(lines, revision, timestamp):
     directory = os.path.dirname(OUTPUT_PATH)
     if directory and not os.path.exists(directory):
         os.makedirs(directory, exist_ok=True)
 
-    with open(OUTPUT_PATH, 'w', encoding='utf-8') as handle:
+    validate_compiled_rules(lines)
+
+    with tempfile.NamedTemporaryFile('w', delete=False, dir=directory, encoding='utf-8') as handle:
+        tmp_path = handle.name
         handle.write('# Auto-generated by IndustrialWhitelist plugin\n')
-        handle.write('# Do not edit manually\n\n')
+        handle.write('# Do not edit manually\n')
+        handle.write(f'# apply_revision: {revision or "unknown"}\n')
+        handle.write(f'# apply_timestamp: {timestamp or "unknown"}\n\n')
         for line in lines:
             handle.write(line + '\n')
 
+    os.replace(tmp_path, OUTPUT_PATH)
+
 
 def main():
-    rules, warnings = generate_rules()
-    write_output(rules)
+    revision, timestamp = parse_apply_metadata()
+    rules, warnings = generate_rules(revision)
+    write_output(rules, revision, timestamp)
 
     print(f'generated {len(rules)} suricata rules at {OUTPUT_PATH}')
     for warning in warnings:

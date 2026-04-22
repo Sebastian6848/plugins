@@ -15,6 +15,12 @@
                     <log_only>Log Only</log_only>
                 </OptionValues>
             </default_action>
+            <last_apply_revision type="TextField">
+                <Default></Default>
+            </last_apply_revision>
+            <last_apply_timestamp type="TextField">
+                <Default></Default>
+            </last_apply_timestamp>
         </general>
         <rules>
             <rule type="ArrayField">

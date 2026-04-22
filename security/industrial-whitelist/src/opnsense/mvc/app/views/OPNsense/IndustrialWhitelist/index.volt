@@ -3,6 +3,31 @@
         const getMap = {'frm_settings': '/api/industrialwhitelist/settings/get'};
         const l7Protocols = ['modbus_tcp', 'dnp3', 'eip', 'mqtt'];
         let applyAlertTimer = null;
+        let hasPendingChanges = false;
+
+        const setPendingChanges = function (value) {
+            hasPendingChanges = value;
+            if (hasPendingChanges) {
+                $('#iw-pending-changes-alert').show();
+            } else {
+                $('#iw-pending-changes-alert').hide();
+            }
+        };
+
+        const refreshPrerequisiteWarning = function () {
+            ajaxGet('/api/industrialwhitelist/service/prereq_status', {}, function (data, status) {
+                if (status !== 'success' || !data) {
+                    $('#iw-prereq-warning').show();
+                    return;
+                }
+
+                if (data.ready) {
+                    $('#iw-prereq-warning').hide();
+                } else {
+                    $('#iw-prereq-warning').show();
+                }
+            });
+        };
 
         const showApplyDangerAlert = function () {
             const alertBox = $('#iw-apply-danger-alert');
@@ -60,6 +85,8 @@
 
         mapDataToFormUI(getMap).done(function () {
             $('.selectpicker').selectpicker('refresh');
+            setPendingChanges(false);
+            refreshPrerequisiteWarning();
         });
 
         $('#{{ formGridRule["table_id"] }}').UIBootgrid({
@@ -107,11 +134,28 @@
                     deferred.resolve();
                 });
                 return deferred;
+            },
+            onAction: function (data) {
+                if (data && data.status === 'ok') {
+                    setPendingChanges(false);
+                    refreshPrerequisiteWarning();
+                }
             }
         });
 
         $('#reconfigureAct').on('click', function () {
             showApplyDangerAlert();
+        });
+
+        $('#frm_settings').on('change input', 'input,select,textarea', function () {
+            setPendingChanges(true);
+        });
+
+        $(document).ajaxSuccess(function (_event, _xhr, settings) {
+            const url = settings && settings.url ? settings.url : '';
+            if (/\/api\/industrialwhitelist\/rules\/(set_item|add_item|del_item|toggle_item|set_sequence)/.test(url)) {
+                setPendingChanges(true);
+            }
         });
 
         $(document).on('shown.bs.modal', '#{{ formGridRule["edit_dialog_id"] }}', function () {
@@ -134,7 +178,7 @@
         <div class="alert alert-danger" id="iw-apply-danger-alert" role="alert" style="margin-top: 10px; display: none;">
             {{ lang._('⚠️ This plugin has taken over the traffic scheduling of the industrial protocol at the underlying level. The rules of the native firewall regarding these two types of ports have been silently overwritten.') }}
         </div>
-        <div class="alert alert-warning" role="alert" style="margin-top: 10px;">
+        <div class="alert alert-warning" id="iw-prereq-warning" role="alert" style="margin-top: 10px;">
             {{ lang._('Prerequisite: enable Intrusion Detection and IPS mode with monitored interfaces in Services -> Intrusion Detection -> Administration.') }}
             <a class="btn btn-default btn-xs" href="/ui/ids" style="margin-left: 8px;">
                 {{ lang._('Open IDS Settings') }}
@@ -151,6 +195,9 @@
     <div class="content-box">
         <div class="col-md-12">
             <hr/>
+            <div class="alert alert-warning" id="iw-pending-changes-alert" role="alert" style="display: none;">
+                {{ lang._('There are unapplied changes. Click Apply to enforce new policy.') }}
+            </div>
             <div class="alert alert-info" role="alert">
                 {{ lang._('Tip: drag rows in the Rules tab to change matching priority, then click Apply.') }}
             </div>

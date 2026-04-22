@@ -4,6 +4,7 @@ namespace OPNsense\IndustrialWhitelist\Api;
 
 use OPNsense\Base\ApiControllerBase;
 use OPNsense\Core\Backend;
+use OPNsense\Core\Config;
 
 class LogsController extends ApiControllerBase
 {
@@ -24,6 +25,21 @@ class LogsController extends ApiControllerBase
         }
 
         return $default;
+    }
+
+    private function extractRevision(string $text): string
+    {
+        if (preg_match('/rev:([A-Za-z0-9\-]+)/', $text, $matches)) {
+            return $matches[1];
+        }
+
+        return '';
+    }
+
+    private function toEpoch(string $timestamp): int
+    {
+        $epoch = strtotime($timestamp);
+        return $epoch === false ? 0 : (int)$epoch;
     }
 
     private function requestString(string $name, string $default = ''): string
@@ -76,7 +92,7 @@ class LogsController extends ApiControllerBase
         }));
     }
 
-    private function loadLogs(int $limit = 5000): array
+    private function loadPfLogs(int $limit = 5000, string $revisionFilter = ''): array
     {
         $response = (new Backend())->configdpRun('filter read log', [$limit]);
         $records = json_decode((string)$response, true);
@@ -95,28 +111,91 @@ class LogsController extends ApiControllerBase
                 continue;
             }
 
+            $rawText = json_encode($record);
+            $revision = $this->extractRevision((string)$rawText);
+            if ($revisionFilter !== '' && $revision !== $revisionFilter) {
+                continue;
+            }
+
             $proto = $this->firstValue($record, ['proto', 'protocol']);
             $port = $this->firstValue($record, ['dstport', 'dest_port', 'port']);
             $rows[] = [
                 'timestamp' => $this->firstValue($record, ['__timestamp', 'timestamp', 'time']),
+                'engine' => 'pf',
                 'source' => $this->firstValue($record, ['src', 'src_ip', 'srcip']),
                 'destination' => $this->firstValue($record, ['dst', 'dest', 'dst_ip', 'dstip']),
                 'protocol_port' => sprintf('%s/%s', $proto, $port),
+                'revision' => $revision !== '' ? $revision : '-',
                 'action' => $this->firstValue($record, ['action', 'act', 'label', 'description']),
+                'message' => $this->firstValue($record, ['label', 'description', 'descr', 'tracker']),
             ];
         }
 
-        return array_reverse($rows);
+        return $rows;
+    }
+
+    private function loadSuricataLogs(int $limit = 5000, string $revisionFilter = ''): array
+    {
+        $response = (new Backend())->configdpRun('ids query alerts', [$limit, 0, '', null]);
+        $data = json_decode((string)$response, true);
+        $records = is_array($data) && isset($data['rows']) && is_array($data['rows']) ? $data['rows'] : [];
+
+        $rows = [];
+        foreach ($records as $record) {
+            if (!is_array($record)) {
+                continue;
+            }
+
+            $alertText = (string)($record['alert'] ?? '');
+            if (stripos($alertText, 'IndustrialWhitelist') === false) {
+                continue;
+            }
+
+            $revision = $this->extractRevision($alertText);
+            if ($revisionFilter !== '' && $revision !== $revisionFilter) {
+                continue;
+            }
+
+            $proto = (string)($record['proto'] ?? $record['app_proto'] ?? '-');
+            $port = (string)($record['dest_port'] ?? '-');
+            $rows[] = [
+                'timestamp' => (string)($record['timestamp'] ?? '-'),
+                'engine' => 'suricata',
+                'source' => (string)($record['src_ip'] ?? '-'),
+                'destination' => (string)($record['dest_ip'] ?? '-'),
+                'protocol_port' => sprintf('%s/%s', $proto, $port),
+                'revision' => $revision !== '' ? $revision : '-',
+                'action' => (string)($record['alert_action'] ?? 'alert'),
+                'message' => $alertText !== '' ? $alertText : '-',
+            ];
+        }
+
+        return $rows;
+    }
+
+    private function loadLogs(int $limit = 5000, string $revisionFilter = ''): array
+    {
+        $rows = array_merge(
+            $this->loadPfLogs($limit, $revisionFilter),
+            $this->loadSuricataLogs($limit, $revisionFilter)
+        );
+
+        usort($rows, function ($left, $right) {
+            return $this->toEpoch((string)($right['timestamp'] ?? '')) <=> $this->toEpoch((string)($left['timestamp'] ?? ''));
+        });
+
+        return $rows;
     }
 
     public function searchAction()
     {
         $limit = max(200, min(20000, $this->requestInt('limit', 5000)));
-        $records = $this->loadLogs($limit);
+        $revision = $this->requestString('revision');
+        $records = $this->loadLogs($limit, $revision);
 
         return $this->searchRecordsetBase(
             $records,
-            ['timestamp', 'source', 'destination', 'protocol_port', 'action']
+            ['timestamp', 'engine', 'source', 'destination', 'protocol_port', 'revision', 'action', 'message']
         );
     }
 
@@ -124,15 +203,30 @@ class LogsController extends ApiControllerBase
     {
         $limit = max(200, min(20000, $this->requestInt('limit', 5000)));
         $searchPhrase = $this->requestString('searchPhrase');
+        $revision = $this->requestString('revision');
 
-        $records = $this->loadLogs($limit);
+        $records = $this->loadLogs($limit, $revision);
         $records = $this->applySearchPhrase(
             $records,
             $searchPhrase,
-            ['timestamp', 'source', 'destination', 'protocol_port', 'action']
+            ['timestamp', 'engine', 'source', 'destination', 'protocol_port', 'revision', 'action', 'message']
         );
 
         $this->exportCsv($records, self::EXPORT_HEADERS);
         return $this->response;
+    }
+
+    public function statusAction()
+    {
+        $config = Config::getInstance()->object();
+        $general = $config['OPNsense']['IndustrialWhitelist']['general'] ?? [];
+
+        $idsStatusOutput = trim((new Backend())->configdRun('ids status'));
+        return [
+            'revision' => (string)($general['last_apply_revision'] ?? ''),
+            'timestamp' => (string)($general['last_apply_timestamp'] ?? ''),
+            'ids_status' => $idsStatusOutput,
+            'ids_running' => stripos($idsStatusOutput, 'running') !== false,
+        ];
     }
 }
