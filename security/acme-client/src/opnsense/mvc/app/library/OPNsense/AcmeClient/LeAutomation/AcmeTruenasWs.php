@@ -1,7 +1,8 @@
 <?php
 
 /*
- * Copyright (C) 2023 Deciso B.V.
+ * Copyright (C) 2026 Konstantinos Spartalis <cspartalis@potatonetworks.com>
+ * Copyright (C) 2023 Jan Winkler
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -26,24 +27,22 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-function opnproxy_configure()
-{
-    return [
-        'user_changed' => ['opnproxy_user_changed:2'],
-        'webproxy' => ['opnproxy_webproxy:2'],
-    ];
-}
+namespace OPNsense\AcmeClient\LeAutomation;
 
-function opnproxy_user_changed($unused, $username = '')
-{
-    mwexecf('/usr/local/opnsense/scripts/OPNProxy/redis_sync_users.py %s', $username);
-}
+use OPNsense\AcmeClient\LeAutomationInterface;
 
-function opnproxy_webproxy($verbose = false, $action = null)
+/**
+ * Run acme.sh deploy hook truenas_ws
+ * @package OPNsense\AcmeClient
+ */
+class AcmeTruenasWs extends Base implements LeAutomationInterface
 {
-    $response = configd_run('template reload Deciso/Proxy');
-
-    if ($verbose) {
-        printf("template reload Deciso/Proxy: %s\n", trim($response));
+    public function prepare()
+    {
+        $this->acme_env['DEPLOY_TRUENAS_APIKEY'] = (string)$this->config->acme_truenasws_apikey;
+        $this->acme_env['DEPLOY_TRUENAS_HOSTNAME'] = (string)$this->config->acme_truenasws_hostname;
+        $this->acme_env['DEPLOY_TRUENAS_PROTOCOL'] = (string)$this->config->acme_truenasws_protocol;
+        $this->acme_args[] = '--deploy-hook truenas_ws --insecure';
+        return true;
     }
 }
