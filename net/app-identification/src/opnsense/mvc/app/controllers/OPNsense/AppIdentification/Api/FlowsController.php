@@ -110,7 +110,7 @@ class FlowsController extends GeneralController
 			if ($flowKey === '') {
 				return [
 					'status' => 'error',
-					'message' => 'Missing required parameter: flow_key.'
+					'message' => 'Flow key not provided or expired'
 				];
 			}
 
@@ -126,7 +126,14 @@ class FlowsController extends GeneralController
 			}
 
 			$records = $this->extractFlowRecords($payload);
-			$detail = !empty($records) ? $records[0] : $payload;
+			if (empty($records)) {
+				return [
+					'status' => 'error',
+					'message' => 'Flow key not provided or expired'
+				];
+			}
+
+			$detail = $records[0];
 
 			return [
 				'status' => 'ok',
@@ -306,7 +313,24 @@ class FlowsController extends GeneralController
 			$record['TOTAL_BYTES'] ?? null
 		]);
 
+		$protocol = $this->firstStringValue([
+			$record['protocol'] ?? null,
+			$record['l7_proto_name'] ?? null,
+			$record['l7_proto'] ?? null,
+			$record['L7_PROTO'] ?? null,
+			$record['proto'] ?? null
+		]);
+
+		$fallbackFlowKey = trim(sprintf('%s-%s-%s', $this->joinEndpoint($srcIp, $srcPort), $this->joinEndpoint($dstIp, $dstPort), $protocol));
+		$flowKey = $this->firstStringValue([
+			$record['flow_key'] ?? null,
+			$record['hash_id'] ?? null,
+			$record['key'] ?? null,
+			$fallbackFlowKey
+		]);
+
 		return [
+			'flow_key' => $flowKey,
 			'last_seen' => $this->formatTimestamp($this->firstNumericValue([
 				$record['last_seen'] ?? null,
 				$record['seen.last'] ?? null,
@@ -318,13 +342,7 @@ class FlowsController extends GeneralController
 				$record['flow_duration'] ?? null,
 				$record['DURATION'] ?? null
 			])),
-			'protocol' => $this->firstStringValue([
-				$record['protocol'] ?? null,
-				$record['l7_proto_name'] ?? null,
-				$record['l7_proto'] ?? null,
-				$record['L7_PROTO'] ?? null,
-				$record['proto'] ?? null
-			]),
+			'protocol' => $protocol,
 			'score' => (int)$this->firstNumericValue([
 				$record['score'] ?? null,
 				$record['flow_score'] ?? null,

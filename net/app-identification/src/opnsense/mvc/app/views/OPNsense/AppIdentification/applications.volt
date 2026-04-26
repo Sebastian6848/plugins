@@ -11,6 +11,33 @@ All rights reserved.
 
 		let appChart = null;
 
+		function showApiError(title, message, retryFn) {
+			const buttons = [{
+				label: '{{ lang._('Close') }}',
+				action: function (dialog) {
+					dialog.close();
+				}
+			}];
+
+			if (typeof retryFn === 'function') {
+				buttons.unshift({
+					label: '{{ lang._('Retry') }}',
+					cssClass: 'btn-primary',
+					action: function (dialog) {
+						dialog.close();
+						retryFn();
+					}
+				});
+			}
+
+			BootstrapDialog.show({
+				type: BootstrapDialog.TYPE_DANGER,
+				title: title,
+				message: esc(message || '{{ lang._('Unknown error') }}'),
+				buttons: buttons
+			});
+		}
+
 		function esc(value) {
 			return $('<div/>').text(value === null || value === undefined ? '' : String(value)).html();
 		}
@@ -114,6 +141,10 @@ All rights reserved.
 
 		function loadApplications() {
 			ajaxCall('/api/appidentification/applications/list', {}, function (data) {
+				if (!data || data.status === 'error') {
+					showApiError('{{ lang._('加载应用数据失败') }}', (data && data.message) ? data.message : '{{ lang._('Unable to load application data') }}', loadApplications);
+					return;
+				}
 				const rows = (data && Array.isArray(data.rows)) ? data.rows : [];
 				renderTopChart(rows);
 				renderApplicationTable(rows);
@@ -151,7 +182,51 @@ All rights reserved.
 
 		function loadRules() {
 			ajaxCall('/api/appidentification/applications/customRules', {}, function (data) {
+				if (!data || data.status === 'error') {
+					showApiError('{{ lang._('加载自定义规则失败') }}', (data && data.message) ? data.message : '{{ lang._('Unable to load custom rules') }}', loadRules);
+					return;
+				}
 				renderRuleTable((data && Array.isArray(data.rows)) ? data.rows : []);
+			});
+		}
+
+		function applyRulesAfterSave(onDone, onFail) {
+			BootstrapDialog.show({
+				type: BootstrapDialog.TYPE_INFO,
+				title: '{{ lang._('Processing') }}',
+				message: '{{ lang._('规则已保存，正在应用...') }}',
+				closable: false,
+				draggable: false,
+				onshown: function (dialogRef) {
+					ajaxCall('/api/appidentification/applications/applyRules', {}, function (data) {
+						dialogRef.close();
+						if (!data || data.status === 'error') {
+								if (typeof onFail === 'function') {
+									onFail();
+								}
+							showApiError('{{ lang._('应用规则失败') }}', (data && data.message) ? data.message : '{{ lang._('Unable to apply custom rules') }}', function () {
+									applyRulesAfterSave(onDone, onFail);
+							});
+							return;
+						}
+
+						BootstrapDialog.show({
+							type: BootstrapDialog.TYPE_PRIMARY,
+							title: '{{ lang._('Success') }}',
+							message: '{{ lang._('规则已生效') }}',
+							buttons: [{
+								label: '{{ lang._('Close') }}',
+								action: function (d) {
+									d.close();
+								}
+							}]
+						});
+
+						if (typeof onDone === 'function') {
+							onDone();
+						}
+					});
+				}
 			});
 		}
 
@@ -169,9 +244,20 @@ All rights reserved.
 		}
 
 		$('#btn_DialogRule_save').off('click').on('click', function () {
+			const $saveButton = $('#btn_DialogRule_save');
 			saveFormToEndpoint('/api/appidentification/applications/saveCustomRuleForm', 'frm_DialogRule', function () {
-				$('#DialogRule').modal('hide');
-				loadRules();
+				$saveButton.prop('disabled', true);
+				applyRulesAfterSave(function () {
+					$saveButton.prop('disabled', false);
+					$('#DialogRule').modal('hide');
+					loadRules();
+					loadApplications();
+				}, function () {
+					$saveButton.prop('disabled', false);
+				});
+			}, true, function () {
+				$saveButton.prop('disabled', false);
+				showApiError('{{ lang._('保存规则失败') }}', '{{ lang._('Unable to save custom rule') }}');
 			});
 		});
 
@@ -195,8 +281,15 @@ All rights reserved.
 					ajaxCall('/api/appidentification/applications/saveCustomRule', {
 						action: 'delete',
 						index: index
-					}, function () {
-						loadRules();
+					}, function (data) {
+						if (!data || data.status === 'error') {
+							showApiError('{{ lang._('删除规则失败') }}', (data && data.message) ? data.message : '{{ lang._('Unable to delete custom rule') }}');
+							return;
+						}
+						applyRulesAfterSave(function () {
+							loadRules();
+							loadApplications();
+						});
 					});
 				}
 			);
@@ -288,6 +381,7 @@ All rights reserved.
 					data-label="{{ lang._('应用规则') }}"
 					data-error-title="{{ lang._('Error applying rules') }}"
 					type="button"></button>
+			<small class="text-muted" style="display:block; margin-top: 8px;">{{ lang._('通常情况下保存规则后会自动应用，此按钮用于手动重试。') }}</small>
 			<br/><br/>
 		</div>
 	</div>

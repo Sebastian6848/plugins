@@ -13,6 +13,54 @@
         <help>Select interfaces to monitor. Leave empty to choose from ntopng UI.</help>
     </field>
     <field>
+        <id>general.rest_scheme</id>
+        <label>REST Scheme</label>
+        <type>dropdown</type>
+        <help>Protocol used for ntopng REST API endpoint.</help>
+    </field>
+    <field>
+        <id>general.rest_host</id>
+        <label>REST Host</label>
+        <type>text</type>
+        <help>Hostname or IP address of ntopng REST API endpoint.</help>
+    </field>
+    <field>
+        <id>general.rest_port</id>
+        <label>REST Port</label>
+        <type>text</type>
+        <help>Port of ntopng REST API endpoint.</help>
+    </field>
+    <field>
+        <id>general.auth_mode</id>
+        <label>Authentication Mode</label>
+        <type>dropdown</type>
+        <help>Authentication mode used for ntopng REST API requests.</help>
+    </field>
+    <field>
+        <id>general.auth_username</id>
+        <label>Auth Username</label>
+        <type>text</type>
+        <help>Username used when Authentication Mode is Basic.</help>
+    </field>
+    <field>
+        <id>general.auth_password</id>
+        <label>Auth Password</label>
+        <type>password</type>
+        <help>Password used when Authentication Mode is Basic.</help>
+    </field>
+    <field>
+        <id>general.auth_token</id>
+        <label>Auth Token</label>
+        <type>password</type>
+        <help>Bearer token used when Authentication Mode is Token.</help>
+    </field>
+    <field>
+        <id>general.auth_cookie</id>
+        <label>Auth Cookie</label>
+        <type>text</type>
+        <help>Cookie header value used when Authentication Mode is Cookie.</help>
+    </field>
+    <field>
         <id>general.http_port</id>
         <label>HTTP Port</label>
         <type>text</type>

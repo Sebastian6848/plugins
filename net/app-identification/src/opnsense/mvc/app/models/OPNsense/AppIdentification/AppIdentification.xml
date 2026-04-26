@@ -12,6 +12,44 @@
 			<Multiple>Y</Multiple>
 			<AllowDynamic>Y</AllowDynamic>
 		</interfaces>
+		<rest_scheme type="OptionField">
+			<Required>N</Required>
+			<Default>http</Default>
+			<OptionValues>
+				<Option0 value="http">HTTP</Option0>
+				<Option1 value="https">HTTPS</Option1>
+			</OptionValues>
+		</rest_scheme>
+		<rest_host type="TextField">
+			<Required>N</Required>
+			<Default>127.0.0.1</Default>
+		</rest_host>
+		<rest_port type="PortField">
+			<Required>Y</Required>
+			<Default>3000</Default>
+		</rest_port>
+		<auth_mode type="OptionField">
+			<Required>N</Required>
+			<Default>none</Default>
+			<OptionValues>
+				<Option0 value="none">None</Option0>
+				<Option1 value="basic">Basic</Option1>
+				<Option2 value="token">Token</Option2>
+				<Option3 value="cookie">Cookie</Option3>
+			</OptionValues>
+		</auth_mode>
+		<auth_username type="TextField">
+			<Required>N</Required>
+		</auth_username>
+		<auth_password type="TextField">
+			<Required>N</Required>
+		</auth_password>
+		<auth_token type="TextField">
+			<Required>N</Required>
+		</auth_token>
+		<auth_cookie type="TextField">
+			<Required>N</Required>
+		</auth_cookie>
 		<http_port type="PortField">
 			<Required>Y</Required>
 			<Default>3000</Default>

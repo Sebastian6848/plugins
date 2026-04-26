@@ -1,9 +1,9 @@
 <menu>
     <Services>
-        <ApplicationIdentification VisibleName="Application Identification" cssClass="fa fa-sitemap fa-fw" url="/ui/appidentification">
-            <Settings order="10" VisibleName="Settings" url="/ui/appidentification"/>
-            <ActiveFlows order="20" VisibleName="Active Flows" url="/ui/appidentification/flows"/>
-            <Applications order="30" VisibleName="Applications" url="/ui/appidentification/applications"/>
-        </ApplicationIdentification>
+        <AppIdentification order="500" description="Application Identification" cssclass="fa fa-bar-chart">
+            <Settings order="10" description="Settings" url="/ui/appidentification/" />
+            <ActiveFlows order="20" description="Active Flows" url="/ui/appidentification/flows/" />
+            <Applications order="30" description="Applications" url="/ui/appidentification/applications/" />
+        </AppIdentification>
     </Services>
 </menu>

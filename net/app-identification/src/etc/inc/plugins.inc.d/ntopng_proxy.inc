@@ -41,12 +41,46 @@ function ntopng_proxy_reconfigure($verbose = false)
 		return;
 	}
 
-	$response = configd_run('appidentification ntopng_generate 1 "" 3000 "" 0 "" 200000 100000 "" ""');
+	$model = new \OPNsense\AppIdentification\AppIdentification();
+	$args = ntopng_proxy_generate_args($model);
+	$response = configd_run('appidentification ntopng_generate ' . implode(' ', $args));
 	if ($verbose) {
 		printf("appidentification ntopng_generate: %s\n", trim((string)$response));
 	}
 
 	configd_run('appidentification ntopng_restart');
+}
+
+/**
+ * Build ntopng_generate action arguments from current model values.
+ *
+ * @param \OPNsense\AppIdentification\AppIdentification $model
+ * @return array
+ */
+function ntopng_proxy_generate_args($model)
+{
+	$interfaces = [];
+	if ($model->interfaces != null) {
+		foreach ($model->interfaces->iterateItems() as $item) {
+			$ifname = trim((string)$item);
+			if ($ifname !== '') {
+				$interfaces[] = $ifname;
+			}
+		}
+	}
+
+	return [
+		escapeshellarg((string)$model->enabled),
+		escapeshellarg(implode(',', $interfaces)),
+		escapeshellarg((string)$model->http_port),
+		escapeshellarg((string)$model->https_port),
+		escapeshellarg((string)$model->dns_mode),
+		escapeshellarg((string)$model->certificate),
+		escapeshellarg((string)$model->max_flows),
+		escapeshellarg((string)$model->max_hosts),
+		escapeshellarg((string)$model->local_networks),
+		escapeshellarg((string)$model->extra_options),
+	];
 }
 
 /**

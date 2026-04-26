@@ -20,9 +20,9 @@ use OPNsense\AppIdentification\AppIdentification;
 class GeneralController extends ApiControllerBase
 {
 	/**
-	 * ntopng REST API base URL.
+	 * Cached model instance.
 	 */
-	private const NTOPNG_REST_BASE = 'http://10.10.10.6:3000/lua/rest/v2/';
+	private $model;
 
 	/**
 	 * Read ntopng settings model.
@@ -32,7 +32,7 @@ class GeneralController extends ApiControllerBase
 	public function getAction(): array
 	{
 		try {
-			$model = new AppIdentification();
+			$model = $this->getModel();
 			return [
 				'general' => $model->getNodes()
 			];
@@ -59,7 +59,7 @@ class GeneralController extends ApiControllerBase
 				return $result;
 			}
 
-			$model = new AppIdentification();
+			$model = $this->getModel();
 			$model->setNodes($this->request->getPost('general'));
 
 			$valMsgs = $model->performValidation();
@@ -77,19 +77,19 @@ class GeneralController extends ApiControllerBase
 			$model->serializeToConfig();
 			Config::getInstance()->save();
 
-			$generateResult = $this->generateNtopngConfig();
-			if (($generateResult['status'] ?? '') === 'error') {
+			$applyResult = $this->applyNtopngConfig();
+			if (($applyResult['status'] ?? '') === 'error') {
 				return [
 					'result' => 'failed',
 					'status' => 'error',
-					'message' => $generateResult['message'] ?? 'Failed to generate ntopng.conf.'
+					'message' => $applyResult['message'] ?? 'Failed to apply ntopng configuration.'
 				];
 			}
 
 			return [
 				'result' => 'saved',
 				'status' => 'ok',
-				'message' => 'Configuration saved and ntopng.conf generated.'
+				'message' => 'Configuration saved and applied.'
 			];
 		} catch (\Throwable $e) {
 			return [
@@ -108,16 +108,7 @@ class GeneralController extends ApiControllerBase
 	public function reconfigureAction(): array
 	{
 		try {
-			$generateResult = $this->generateNtopngConfig();
-			if (($generateResult['status'] ?? '') === 'error') {
-				return $generateResult;
-			}
-
-			$restartResult = trim((new Backend())->configdRun('appidentification ntopng_restart'));
-			return [
-				'status' => 'ok',
-				'message' => $restartResult !== '' ? $restartResult : 'ntopng restarted.'
-			];
+			return $this->applyNtopngConfig();
 		} catch (\Throwable $e) {
 			return [
 				'status' => 'error',
@@ -158,7 +149,7 @@ class GeneralController extends ApiControllerBase
 	{
 		try {
 			$endpoint = ltrim($endpoint, '/');
-			$url = self::NTOPNG_REST_BASE . $endpoint;
+			$url = $this->getRestBaseUrl() . $endpoint;
 
 			if (!empty($params)) {
 				$separator = strpos($url, '?') === false ? '?' : '&';
@@ -279,42 +270,70 @@ class GeneralController extends ApiControllerBase
 		];
 
 		try {
-			$config = Config::getInstance()->object();
-			if (empty($config->OPNsense->AppIdentification)) {
-				return $auth;
+			$model = $this->getModel();
+			$mode = strtolower(trim((string)$model->auth_mode));
+
+			switch ($mode) {
+				case 'basic':
+					$auth['username'] = trim((string)$model->auth_username);
+					$auth['password'] = trim((string)$model->auth_password);
+					break;
+
+				case 'token':
+					$auth['token'] = trim((string)$model->auth_token);
+					break;
+
+				case 'cookie':
+					$auth['cookie'] = trim((string)$model->auth_cookie);
+					break;
+
+				default:
+					break;
 			}
-
-			$pluginCfg = $config->OPNsense->AppIdentification;
-
-			$auth['username'] = $this->firstStringValue([
-				$pluginCfg->username ?? null,
-				$pluginCfg->auth->username ?? null,
-				$pluginCfg->general->username ?? null,
-				$pluginCfg->ntopng->username ?? null
-			]);
-			$auth['password'] = $this->firstStringValue([
-				$pluginCfg->password ?? null,
-				$pluginCfg->auth->password ?? null,
-				$pluginCfg->general->password ?? null,
-				$pluginCfg->ntopng->password ?? null
-			]);
-			$auth['token'] = $this->firstStringValue([
-				$pluginCfg->token ?? null,
-				$pluginCfg->auth->token ?? null,
-				$pluginCfg->general->token ?? null,
-				$pluginCfg->ntopng->token ?? null
-			]);
-			$auth['cookie'] = $this->firstStringValue([
-				$pluginCfg->cookie ?? null,
-				$pluginCfg->auth->cookie ?? null,
-				$pluginCfg->general->cookie ?? null,
-				$pluginCfg->ntopng->cookie ?? null
-			]);
 		} catch (\Throwable $e) {
 			return $auth;
 		}
 
 		return $auth;
+	}
+
+	/**
+	 * Return current plugin model.
+	 *
+	 * @return AppIdentification
+	 */
+	protected function getModel(): AppIdentification
+	{
+		if ($this->model === null) {
+			$this->model = new AppIdentification();
+		}
+
+		return $this->model;
+	}
+
+	/**
+	 * Build ntopng REST base URL from model settings.
+	 *
+	 * @return string
+	 */
+	private function getRestBaseUrl(): string
+	{
+		$model = $this->getModel();
+		$scheme = strtolower(trim((string)$model->rest_scheme));
+		$host = trim((string)$model->rest_host);
+		$port = trim((string)$model->rest_port);
+
+		if ($scheme !== 'https') {
+			$scheme = 'http';
+		}
+		if ($host === '') {
+			$host = '127.0.0.1';
+		}
+		if ($port === '' || !is_numeric($port)) {
+			$port = '3000';
+		}
+
+		return sprintf('%s://%s:%s/lua/rest/v2/', $scheme, $host, $port);
 	}
 
 	/**
@@ -382,7 +401,7 @@ class GeneralController extends ApiControllerBase
 	private function generateNtopngConfig(): array
 	{
 		try {
-			$model = new AppIdentification();
+			$model = $this->getModel();
 			$config = [
 				'enabled' => (string)$model->enabled,
 				'interfaces' => is_object($model->interfaces) ? (string)$model->interfaces : (string)$model->interfaces,
@@ -432,5 +451,24 @@ class GeneralController extends ApiControllerBase
 				'message' => sprintf('Failed to generate ntopng.conf: %s', $e->getMessage())
 			];
 		}
+	}
+
+	/**
+	 * Generate and apply ntopng configuration.
+	 *
+	 * @return array
+	 */
+	private function applyNtopngConfig(): array
+	{
+		$generateResult = $this->generateNtopngConfig();
+		if (($generateResult['status'] ?? '') === 'error') {
+			return $generateResult;
+		}
+
+		$restartResult = trim((new Backend())->configdRun('appidentification ntopng_restart'));
+		return [
+			'status' => 'ok',
+			'message' => $restartResult !== '' ? $restartResult : 'ntopng restarted.'
+		];
 	}
 }

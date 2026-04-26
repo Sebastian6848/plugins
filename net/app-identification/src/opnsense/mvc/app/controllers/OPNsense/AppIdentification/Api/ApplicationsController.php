@@ -22,6 +22,11 @@ class ApplicationsController extends GeneralController
 	private const CUSTOM_RULES_FILE = '/var/lib/ntopng/protos.txt';
 
 	/**
+	 * Backend action namespace.
+	 */
+	private const BACKEND_NAMESPACE = 'appidentification';
+
+	/**
 	 * List detected L7 protocols and traffic statistics on current interface.
 	 *
 	 * @return array
@@ -210,10 +215,10 @@ class ApplicationsController extends GeneralController
 	public function applyRulesAction(): array
 	{
 		try {
-			$response = trim((new Backend())->configdRun('appidentification apply_rules'));
+			$response = trim((new Backend())->configdRun(self::BACKEND_NAMESPACE . ' reload'));
 			return [
 				'status' => 'ok',
-				'message' => $response !== '' ? $response : 'ntopng restart command executed.'
+				'message' => $response !== '' ? $response : 'ntopng reload command executed.'
 			];
 		} catch (\Throwable $e) {
 			return [
@@ -422,16 +427,27 @@ class ApplicationsController extends GeneralController
 	 */
 	private function readRawRuleLines(): array
 	{
-		if (!file_exists(self::CUSTOM_RULES_FILE)) {
+		$raw = trim((new Backend())->configdRun(self::BACKEND_NAMESPACE . ' read_rules'));
+		if ($raw === '') {
 			return [];
 		}
 
-		$lines = @file(self::CUSTOM_RULES_FILE, FILE_IGNORE_NEW_LINES);
-		if ($lines === false) {
-			throw new \RuntimeException('Cannot read protos.txt file.');
+		$payload = json_decode($raw, true);
+		if (!is_array($payload)) {
+			throw new \RuntimeException('Cannot decode backend read_rules response.');
+		}
+		if (($payload['status'] ?? '') !== 'ok') {
+			throw new \RuntimeException((string)($payload['message'] ?? 'Cannot read protos.txt file.'));
 		}
 
-		return $lines;
+		$lines = $payload['data'] ?? [];
+		if (!is_array($lines)) {
+			return [];
+		}
+
+		return array_values(array_map(function ($line) {
+			return rtrim((string)$line, "\r\n");
+		}, $lines));
 	}
 
 	/**
@@ -467,20 +483,25 @@ class ApplicationsController extends GeneralController
 	 */
 	private function writeRawRuleLines(array $lines): void
 	{
-		$directory = dirname(self::CUSTOM_RULES_FILE);
-		if (!is_dir($directory) && !@mkdir($directory, 0755, true) && !is_dir($directory)) {
-			throw new \RuntimeException('Cannot create directory for protos.txt.');
-		}
-
-		$content = implode("\n", array_map(function ($line) {
+		$payloadLines = array_values(array_map(function ($line) {
 			return rtrim((string)$line, "\r\n");
 		}, $lines));
-		if ($content !== '') {
-			$content .= "\n";
+
+		$payload = json_encode(['rules' => $payloadLines]);
+		if (!is_string($payload)) {
+			throw new \RuntimeException('Cannot encode custom rules payload.');
 		}
 
-		if (@file_put_contents(self::CUSTOM_RULES_FILE, $content, LOCK_EX) === false) {
-			throw new \RuntimeException('Cannot write protos.txt file.');
+		$backend = new Backend();
+		$responseRaw = trim($backend->configdpRun(self::BACKEND_NAMESPACE, ['write_rules', $payload]));
+		if ($responseRaw === '') {
+			throw new \RuntimeException('Empty response when writing protos.txt via backend.');
+		}
+
+		$response = json_decode($responseRaw, true);
+		if (!is_array($response) || ($response['status'] ?? '') !== 'ok') {
+			$message = is_array($response) ? (string)($response['message'] ?? 'unknown backend failure') : $responseRaw;
+			throw new \RuntimeException('Cannot write protos.txt file: ' . $message);
 		}
 	}
 

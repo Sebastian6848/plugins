@@ -11,6 +11,33 @@ All rights reserved.
 
 		let autoRefreshTimer = null;
 
+		function showApiError(title, message, retryFn) {
+			const buttons = [{
+				label: "{{ lang._('Close') }}",
+				action: function (dialog) {
+					dialog.close();
+				}
+			}];
+
+			if (typeof retryFn === 'function') {
+				buttons.unshift({
+					label: "{{ lang._('Retry') }}",
+					cssClass: 'btn-primary',
+					action: function (dialog) {
+						dialog.close();
+						retryFn();
+					}
+				});
+			}
+
+			BootstrapDialog.show({
+				type: BootstrapDialog.TYPE_DANGER,
+				title: title,
+				message: bootstrapSafe(message || "{{ lang._('Unknown error') }}"),
+				buttons: buttons
+			});
+		}
+
 		function readFilters() {
 			return {
 				host: $('#flow_filter_host').val() || '',
@@ -42,6 +69,11 @@ All rights reserved.
 
 		function loadApplicationOptions() {
 			ajaxCall('/api/appidentification/applications/list', {}, function (data) {
+				if (!data || data.status === 'error') {
+					showApiError("{{ lang._('加载应用筛选失败') }}", (data && data.message) ? data.message : "{{ lang._('Unable to load application options') }}", loadApplicationOptions);
+					return;
+				}
+
 				const select = $('#flow_filter_application');
 				const current = select.val() || '';
 				select.find('option:not([value=""])').remove();
@@ -63,19 +95,16 @@ All rights reserved.
 		}
 
 		function showFlowDetail(flowKey) {
+			if (!flowKey) {
+				showApiError("{{ lang._('获取流详情失败') }}", "{{ lang._('流已过期') }}");
+				return;
+			}
+
 			ajaxCall('/api/appidentification/flows/getFlowDetail', {flow_key: flowKey}, function (data) {
 				if (!data || data.status === 'error') {
-					BootstrapDialog.show({
-						type: BootstrapDialog.TYPE_DANGER,
-						title: "{{ lang._('Error') }}",
-						message: bootstrapSafe((data && data.message) ? data.message : "{{ lang._('Unable to retrieve flow details') }}"),
-						buttons: [{
-							label: "{{ lang._('Close') }}",
-							action: function (dialog) {
-								dialog.close();
-							}
-						}]
-					});
+					const backendMessage = (data && data.message) ? data.message : "{{ lang._('Unable to retrieve flow details') }}";
+					const userMessage = backendMessage.indexOf('expired') !== -1 ? "{{ lang._('流已过期') }}" : backendMessage;
+					showApiError("{{ lang._('获取流详情失败') }}", userMessage);
 					return;
 				}
 
@@ -138,14 +167,18 @@ All rights reserved.
 				},
 				formatters: {
 					commands: function (column, row) {
-						const flowKey = bootstrapSafe(row.flow_key || row.id || row.client + '-' + row.server + '-' + row.last_seen);
+						const flowKey = bootstrapSafe(row.flow_key || '');
 						let buttons = '';
 						buttons += '<div class="btn-group">';
 						buttons += '<button class="btn btn-xs btn-default dropdown-toggle" data-toggle="dropdown" type="button">';
 						buttons += '<span class="fa fa-list"></span> <span class="caret"></span>';
 						buttons += '</button>';
 						buttons += '<ul class="dropdown-menu pull-right" role="menu">';
-						buttons += '<li><a href="#" data-action="detail" data-flow-key="' + flowKey + '"><span class="fa fa-search"></span> {{ lang._("查看详情") }}</a></li>';
+						if (flowKey !== '') {
+							buttons += '<li><a href="#" data-action="detail" data-flow-key="' + flowKey + '"><span class="fa fa-search"></span> {{ lang._("查看详情") }}</a></li>';
+						} else {
+							buttons += '<li><a href="#" data-action="expired"><span class="fa fa-clock-o"></span> {{ lang._("流已过期") }}</a></li>';
+						}
 						buttons += '<li><a href="#" data-action="block" data-flow-key="' + flowKey + '"><span class="fa fa-ban"></span> {{ lang._("阻止流量") }}</a></li>';
 						buttons += '</ul>';
 						buttons += '</div>';
@@ -184,6 +217,11 @@ All rights reserved.
 						});
 					}
 				);
+			});
+
+			gridFlows.find('a[data-action=expired]').off('click').on('click', function (event) {
+				event.preventDefault();
+				showApiError("{{ lang._('获取流详情失败') }}", "{{ lang._('流已过期') }}");
 			});
 		});
 
@@ -234,7 +272,7 @@ All rights reserved.
 			<div class="form-inline" style="margin-bottom: 10px;">
 				<div class="form-group" style="margin-right: 8px; margin-bottom: 6px;">
 					<label for="flow_filter_host">{{ lang._('Host') }}</label>
-					<input id="flow_filter_host" type="text" class="form-control" placeholder="10.10.10.6" style="width: 140px;"/>
+					<input id="flow_filter_host" type="text" class="form-control" placeholder="{{ lang._('Host/IP') }}" style="width: 140px;"/>
 				</div>
 				<div class="form-group" style="margin-right: 8px; margin-bottom: 6px;">
 					<label for="flow_filter_protocol">{{ lang._('Protocol') }}</label>
