@@ -156,66 +156,93 @@ class GeneralController extends ApiControllerBase
 				$url .= $separator . http_build_query($params);
 			}
 
-			$ch = curl_init();
+			$headers = ['Accept: application/json'];
+			$token = trim((string)($this->getModel()->auth_token ?? ''));
+			$cookieStr = '';
+
+			syslog(LOG_WARNING, 'AppIdentification proxyRequest: url=' . $url . ' token_len=' . strlen($token));
+
+			if ($token !== '') {
+				$headers[] = 'Authorization: Token ' . $token;
+			} else {
+				syslog(LOG_WARNING, 'AppIdentification proxyRequest: no token, trying session auth');
+				$cookieStr = $this->getNtopngSession();
+				if ($cookieStr === '') {
+					syslog(LOG_ERR, 'AppIdentification proxyRequest: session auth failed, empty cookie');
+					return [
+						'status' => 'error',
+						'message' => 'ntopng 认证失败'
+					];
+				}
+				syslog(LOG_WARNING, 'AppIdentification proxyRequest: session cookie acquired len=' . strlen($cookieStr));
+			}
+
+			$ch = curl_init($url);
 			if ($ch === false) {
+				syslog(LOG_ERR, 'AppIdentification proxyRequest: unable to initialize cURL client');
 				return [
 					'status' => 'error',
 					'message' => 'Unable to initialize cURL client.'
 				];
 			}
 
-			$headers = ['Accept: application/json'];
-			$token = trim((string)($this->getModel()->auth_token ?? ''));
-			$cookieStr = '';
-
-			if ($token !== '') {
-				$headers[] = 'Authorization: Token ' . $token;
-			} else {
-				$cookieStr = $this->getNtopngSession();
-				if ($cookieStr === '') {
-					return [
-						'status' => 'error',
-						'message' => '请在设置页面配置 ntopng API Token 或用户名密码'
-					];
-				}
-			}
-
-			curl_setopt($ch, CURLOPT_URL, $url);
-			curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-			curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
-			curl_setopt($ch, CURLOPT_TIMEOUT, 10);
-			curl_setopt($ch, CURLOPT_FAILONERROR, false);
-			curl_setopt($ch, CURLOPT_FOLLOWLOCATION, false);
-
-			curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+			curl_setopt_array($ch, [
+				CURLOPT_RETURNTRANSFER => true,
+				CURLOPT_CONNECTTIMEOUT => 5,
+				CURLOPT_TIMEOUT => 10,
+				CURLOPT_FAILONERROR => false,
+				CURLOPT_FOLLOWLOCATION => false,
+				CURLOPT_HTTPHEADER => $headers,
+			]);
 			if ($cookieStr !== '') {
 				curl_setopt($ch, CURLOPT_COOKIE, $cookieStr);
 			}
 
 			$responseRaw = curl_exec($ch);
 			$httpCode = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
-
-			if ($responseRaw === false) {
-				$errorMessage = curl_error($ch);
-				curl_close($ch);
-				return [
-					'status' => 'error',
-					'message' => sprintf('ntopng request failed: %s', $errorMessage)
-				];
-			}
-
+			$curlErr = curl_error($ch);
 			curl_close($ch);
 
-			if ($httpCode === 302) {
-				syslog(LOG_ERR, 'AppIdentification: ntopng 认证失败(302)，请检查 Token 或账号密码');
+			syslog(LOG_WARNING, 'AppIdentification proxyRequest: httpCode=' . $httpCode . ' curlErr=' . $curlErr . ' bodyLen=' . strlen((string)$responseRaw));
+			syslog(LOG_WARNING, 'AppIdentification proxyRequest: bodyPreview=' . substr((string)$responseRaw, 0, 200));
+
+			if ($responseRaw === false) {
+				syslog(LOG_ERR, 'AppIdentification: curl exec failed: ' . $curlErr);
 				return [
 					'status' => 'error',
-					'message' => 'ntopng 认证失败，请检查 Settings 中的认证配置'
+					'message' => sprintf('curl 请求失败: %s', $curlErr)
 				];
 			}
 
-			$decoded = json_decode($responseRaw, true);
+			if ($httpCode === 302) {
+				syslog(LOG_ERR, 'AppIdentification: auth failed, got 302');
+				return [
+					'status' => 'error',
+					'message' => 'ntopng 认证失败(302)'
+				];
+			}
+
+			if ($httpCode >= 400) {
+				syslog(LOG_ERR, 'AppIdentification: HTTP error ' . $httpCode);
+				return [
+					'status' => 'error',
+					'message' => sprintf('ntopng returned HTTP error %d', $httpCode),
+					'http_code' => $httpCode
+				];
+			}
+
+			if ($httpCode === 0) {
+				syslog(LOG_ERR, 'AppIdentification: connection failed, httpCode=0');
+				return [
+					'status' => 'error',
+					'message' => '无法连接到 ntopng，请检查服务是否运行',
+					'http_code' => 0
+				];
+			}
+
+			$decoded = json_decode((string)$responseRaw, true);
 			if (json_last_error() !== JSON_ERROR_NONE || !is_array($decoded)) {
+				syslog(LOG_ERR, 'AppIdentification: JSON parse failed: ' . json_last_error_msg());
 				syslog(LOG_ERR, 'AppIdentification: ntopng 返回非 JSON 内容: ' . substr((string)$responseRaw, 0, 300));
 				return [
 					'status' => 'error',
@@ -224,17 +251,10 @@ class GeneralController extends ApiControllerBase
 				];
 			}
 
-			if ($httpCode >= 400) {
-				return [
-					'status' => 'error',
-					'message' => 'ntopng returned HTTP error.',
-					'http_code' => $httpCode,
-					'response' => $decoded
-				];
-			}
-
+			syslog(LOG_WARNING, 'AppIdentification proxyRequest: success, rc=' . ($decoded['rc'] ?? 'N/A'));
 			return $decoded;
 		} catch (\Throwable $e) {
+			syslog(LOG_ERR, 'AppIdentification proxyRequest: unhandled error: ' . $e->getMessage());
 			return [
 				'status' => 'error',
 				'message' => sprintf('Unhandled proxy error: %s', $e->getMessage())
