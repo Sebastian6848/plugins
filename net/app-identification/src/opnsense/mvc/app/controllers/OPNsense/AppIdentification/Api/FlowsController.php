@@ -38,7 +38,11 @@ class FlowsController extends GeneralController
 			$searchPhrase = trim($this->requestString('searchPhrase', ''));
 			$sort = $this->requestSort();
 
-			$params = array_filter([
+			$params = [
+				'ifid' => $this->getIfid(),
+				'perPage' => 500
+			];
+			$params += array_filter([
 				'host' => $this->requestString('host', ''),
 				'l7_proto' => $this->requestString('l7_proto', ''),
 				'traffic_type' => $this->requestString('traffic_type', ''),
@@ -48,7 +52,7 @@ class FlowsController extends GeneralController
 				return $value !== '';
 			});
 
-			$payload = $this->proxyRequest('get/flow/active.lua', $params);
+			$payload = $this->proxyRequest('flow/active.lua', $params);
 			if (($payload['status'] ?? '') === 'error') {
 				return [
 					'rows' => [],
@@ -115,10 +119,11 @@ class FlowsController extends GeneralController
 			}
 
 			$params = ['flow_key' => $flowKey];
-			$payload = $this->proxyRequest('get/flow/data.lua', $params);
+			$params['ifid'] = $this->getIfid();
+			$payload = $this->proxyRequest('flow/data.lua', $params);
 
 			if (($payload['status'] ?? '') === 'error') {
-				$payload = $this->proxyRequest('get/flow/active.lua', $params);
+				$payload = $this->proxyRequest('flow/active.lua', $params);
 			}
 
 			if (($payload['status'] ?? '') === 'error') {
@@ -221,6 +226,7 @@ class FlowsController extends GeneralController
 			$payload['rows'] ?? null,
 			$payload['data'] ?? null,
 			$payload['flows'] ?? null,
+			$payload['rsp']['data'] ?? null,
 			$payload['rsp']['flows'] ?? null,
 			$payload['response']['flows'] ?? null,
 			$payload['response'] ?? null
@@ -269,95 +275,40 @@ class FlowsController extends GeneralController
 	 */
 	private function mapFlowRecord(array $record): array
 	{
-		$srcIp = $this->firstStringValue([
-			$record['client'] ?? null,
-			$record['cli_ip'] ?? null,
-			$record['src_ip'] ?? null,
-			$record['ip.src'] ?? null,
-			$record['IPV4_SRC_ADDR'] ?? null,
-			$record['IPV6_SRC_ADDR'] ?? null
-		]);
-		$dstIp = $this->firstStringValue([
-			$record['server'] ?? null,
-			$record['srv_ip'] ?? null,
-			$record['dst_ip'] ?? null,
-			$record['ip.dst'] ?? null,
-			$record['IPV4_DST_ADDR'] ?? null,
-			$record['IPV6_DST_ADDR'] ?? null
-		]);
+		$client = is_array($record['client'] ?? null) ? $record['client'] : [];
+		$server = is_array($record['server'] ?? null) ? $record['server'] : [];
+		$proto = is_array($record['protocol'] ?? null) ? $record['protocol'] : [];
+		$thpt = is_array($record['thpt'] ?? null) ? $record['thpt'] : [];
 
-		$srcPort = $this->firstStringValue([
-			$record['client_port'] ?? null,
-			$record['cli_port'] ?? null,
-			$record['src_port'] ?? null,
-			$record['sport'] ?? null,
-			$record['L4_SRC_PORT'] ?? null
-		]);
-		$dstPort = $this->firstStringValue([
-			$record['server_port'] ?? null,
-			$record['srv_port'] ?? null,
-			$record['dst_port'] ?? null,
-			$record['dport'] ?? null,
-			$record['L4_DST_PORT'] ?? null
-		]);
-
-		$throughputBps = $this->firstNumericValue([
-			$record['throughput_bps'] ?? null,
-			$record['bps'] ?? null,
-			$record['bytes_rate'] ?? null
-		]);
-
-		$totalBytes = $this->firstNumericValue([
-			$record['total_bytes'] ?? null,
-			$record['bytes'] ?? null,
-			$record['TOTAL_BYTES'] ?? null
-		]);
-
-		$protocol = $this->firstStringValue([
-			$record['protocol'] ?? null,
-			$record['l7_proto_name'] ?? null,
-			$record['l7_proto'] ?? null,
-			$record['L7_PROTO'] ?? null,
-			$record['proto'] ?? null
-		]);
-
-		$fallbackFlowKey = trim(sprintf('%s-%s-%s', $this->joinEndpoint($srcIp, $srcPort), $this->joinEndpoint($dstIp, $dstPort), $protocol));
-		$flowKey = $this->firstStringValue([
-			$record['flow_key'] ?? null,
-			$record['hash_id'] ?? null,
-			$record['key'] ?? null,
-			$fallbackFlowKey
-		]);
+		$duration = (int)($record['duration'] ?? 0);
+		$bytes = (int)($record['bytes'] ?? 0);
+		$bps = (float)($thpt['bps'] ?? 0);
+		$l4 = (string)($proto['l4'] ?? '');
+		$l7 = (string)($proto['l7'] ?? '');
+		$clientName = (string)($client['name'] ?? '');
+		$serverName = (string)($server['name'] ?? '');
+		$clientHost = $clientName !== '' ? $clientName : (string)($client['ip'] ?? '');
+		$serverHost = $serverName !== '' ? $serverName : (string)($server['ip'] ?? '');
 
 		return [
-			'flow_key' => $flowKey,
-			'last_seen' => $this->formatTimestamp($this->firstNumericValue([
-				$record['last_seen'] ?? null,
-				$record['seen.last'] ?? null,
-				$record['LAST_SEEN'] ?? null,
-				$record['LAST_SWITCHED'] ?? null
-			])),
-			'duration' => $this->formatDuration($this->firstNumericValue([
-				$record['duration'] ?? null,
-				$record['flow_duration'] ?? null,
-				$record['DURATION'] ?? null
-			])),
-			'protocol' => $protocol,
-			'score' => (int)$this->firstNumericValue([
-				$record['score'] ?? null,
-				$record['flow_score'] ?? null,
-				$record['alert_score'] ?? null
-			]),
-			'client' => $this->joinEndpoint($srcIp, $srcPort),
-			'server' => $this->joinEndpoint($dstIp, $dstPort),
-			'throughput' => $this->formatBitsPerSecond($throughputBps),
-			'total_bytes' => $this->formatBytes($totalBytes),
-			'info' => $this->firstStringValue([
-				$record['info'] ?? null,
-				$record['application'] ?? null,
-				$record['category'] ?? null,
-				$record['flow_info'] ?? null
-			])
+			'flow_key' => $record['key'] ?? $record['hash_id'] ?? '',
+			'hash_id' => $record['hash_id'] ?? '',
+			'last_seen' => date('H:i:s', (int)($record['last_seen'] ?? time())),
+			'duration' => sprintf('%02d:%02d', intdiv($duration, 60), $duration % 60),
+			'protocol' => trim($l4 . ':' . $l7, ':'),
+			'l4_proto' => $l4,
+			'l7_proto' => $l7,
+			'score' => (int)($record['score'] ?? 0),
+			'client' => $this->joinEndpoint($clientHost, (string)($client['port'] ?? '')),
+			'client_ip' => $client['ip'] ?? '',
+			'server' => $this->joinEndpoint($serverHost, (string)($server['port'] ?? '')),
+			'server_ip' => $server['ip'] ?? '',
+			'throughput' => $this->formatBitsPerSecond($bps),
+			'total_bytes' => $this->formatBytes($bytes),
+			'bytes_raw' => $bytes,
+			'breakdown' => $record['breakdown'] ?? [],
+			'is_blacklisted' => ($client['is_blacklisted'] ?? false) || ($server['is_blacklisted'] ?? false),
+			'info' => $l7
 		];
 	}
 

@@ -34,15 +34,18 @@ class ApplicationsController extends GeneralController
 	public function listAction(): array
 	{
 		try {
-			$params = array_filter([
-				'ifid' => $this->requestString('ifid', '')
-			], function ($value) {
-				return $value !== '';
-			});
+			$params = ['ifid' => $this->getIfid()];
 
-			$payload = $this->proxyRequest('get/interface/l7/stats.lua', $params);
-			if (($payload['status'] ?? '') === 'error') {
-				return $payload;
+			$payload = $this->proxyRequest('interface/l7/stats.lua', $params);
+			if (($payload['status'] ?? '') === 'error' || (($payload['rc'] ?? 0) !== 0)) {
+				$flowPayload = $this->proxyRequest('flow/active.lua', [
+					'ifid' => $this->getIfid(),
+					'perPage' => 100
+				]);
+				if (($flowPayload['status'] ?? '') === 'error') {
+					return $flowPayload;
+				}
+				$payload = $this->aggregateL7FromFlows($flowPayload['rsp']['data'] ?? []);
 			}
 
 			$rows = [];
@@ -236,7 +239,7 @@ class ApplicationsController extends GeneralController
 	public function categoriesAction(): array
 	{
 		try {
-			$payload = $this->proxyRequest('get/l7/category/consts.lua', []);
+			$payload = $this->proxyRequest('l7/category/consts.lua', []);
 			if (($payload['status'] ?? '') === 'error') {
 				return $payload;
 			}
@@ -367,6 +370,7 @@ class ApplicationsController extends GeneralController
 		}
 
 		$this->writeRawRuleLines($rawLines);
+		$this->reloadRules();
 		$updatedRules = $this->readCustomRules();
 
 		return [
@@ -506,6 +510,24 @@ class ApplicationsController extends GeneralController
 	}
 
 	/**
+	 * Reload ntopng after custom protocol rule changes.
+	 *
+	 * @return void
+	 */
+	private function reloadRules(): void
+	{
+		$responseRaw = trim((new Backend())->configdRun(self::BACKEND_NAMESPACE . ' reload'));
+		if ($responseRaw === '') {
+			return;
+		}
+
+		$response = json_decode($responseRaw, true);
+		if (is_array($response) && ($response['status'] ?? '') === 'error') {
+			throw new \RuntimeException((string)($response['message'] ?? 'Unable to reload ntopng.'));
+		}
+	}
+
+	/**
 	 * Parse string from request query/post.
 	 *
 	 * @param string $name
@@ -551,6 +573,8 @@ class ApplicationsController extends GeneralController
 			$payload['rows'] ?? null,
 			$payload['data'] ?? null,
 			$payload['stats'] ?? null,
+			$payload['rsp'] ?? null,
+			$payload['rsp']['data'] ?? null,
 			$payload['response'] ?? null
 		];
 
@@ -624,5 +648,56 @@ class ApplicationsController extends GeneralController
 		}
 
 		return 0.0;
+	}
+
+	/**
+	 * Build application statistics from active flow data when ntopng L7 stats endpoint is unavailable.
+	 *
+	 * @param array $flows
+	 * @return array
+	 */
+	private function aggregateL7FromFlows(array $flows): array
+	{
+		$stats = [];
+		foreach ($flows as $flow) {
+			if (!is_array($flow)) {
+				continue;
+			}
+
+			$l7 = trim((string)($flow['protocol']['l7'] ?? ''));
+			if ($l7 === '') {
+				$l7 = 'Unknown';
+			}
+
+			if (!isset($stats[$l7])) {
+				$stats[$l7] = [
+					'protocol' => $l7,
+					'flows' => 0,
+					'bytes' => 0,
+					'up_bytes' => 0,
+					'down_bytes' => 0,
+					'category' => 'Active Flows'
+				];
+			}
+
+			$bytes = (int)($flow['bytes'] ?? 0);
+			$breakdown = is_array($flow['breakdown'] ?? null) ? $flow['breakdown'] : [];
+			$upRatio = (float)($breakdown['cli2srv'] ?? 50) / 100;
+			$upBytes = (int)round($bytes * $upRatio);
+
+			$stats[$l7]['flows']++;
+			$stats[$l7]['bytes'] += $bytes;
+			$stats[$l7]['up_bytes'] += $upBytes;
+			$stats[$l7]['down_bytes'] += max(0, $bytes - $upBytes);
+		}
+
+		usort($stats, function ($left, $right) {
+			return $right['bytes'] <=> $left['bytes'];
+		});
+
+		return [
+			'rc' => 0,
+			'rsp' => array_values($stats)
+		];
 	}
 }

@@ -28,6 +28,11 @@
 			<Required>Y</Required>
 			<Default>3000</Default>
 		</rest_port>
+		<ifid type="IntegerField">
+			<Required>N</Required>
+			<Default>0</Default>
+			<MinimumValue>0</MinimumValue>
+		</ifid>
 		<auth_mode type="OptionField">
 			<Required>N</Required>
 			<Default>none</Default>
@@ -40,6 +45,7 @@
 		</auth_mode>
 		<auth_username type="TextField">
 			<Required>N</Required>
+			<Default>admin</Default>
 		</auth_username>
 		<auth_password type="TextField">
 			<Required>N</Required>

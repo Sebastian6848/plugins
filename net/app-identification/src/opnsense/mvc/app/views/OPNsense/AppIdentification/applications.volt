@@ -201,11 +201,11 @@ All rights reserved.
 					ajaxCall('/api/appidentification/applications/applyRules', {}, function (data) {
 						dialogRef.close();
 						if (!data || data.status === 'error') {
-								if (typeof onFail === 'function') {
-									onFail();
-								}
+							if (typeof onFail === 'function') {
+								onFail();
+							}
 							showApiError('{{ lang._('应用规则失败') }}', (data && data.message) ? data.message : '{{ lang._('Unable to apply custom rules') }}', function () {
-									applyRulesAfterSave(onDone, onFail);
+								applyRulesAfterSave(onDone, onFail);
 							});
 							return;
 						}
@@ -309,6 +309,13 @@ All rights reserved.
 
 		loadApplications();
 		loadRules();
+
+		$(document).ajaxError(function (event, xhr, settings) {
+			if (settings && settings.url && settings.url.indexOf('/api/appidentification/') === 0) {
+				const msg = xhr.responseJSON ? xhr.responseJSON.message : '{{ lang._('网络请求失败') }}';
+				showApiError('{{ lang._('加载失败') }}', msg);
+			}
+		});
 	});
 </script>
 

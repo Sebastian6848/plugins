@@ -31,28 +31,34 @@
         <help>Port of ntopng REST API endpoint.</help>
     </field>
     <field>
+        <id>general.ifid</id>
+        <label>Interface ID</label>
+        <type>text</type>
+        <help>ntopng interface id used by REST calls. Use 0 unless ntopng exposes another interface id.</help>
+    </field>
+    <field>
         <id>general.auth_mode</id>
         <label>Authentication Mode</label>
         <type>dropdown</type>
-        <help>Authentication mode used for ntopng REST API requests.</help>
+        <help>Token is preferred. When token is empty, username and password are used to create an ntopng session cookie.</help>
     </field>
     <field>
         <id>general.auth_username</id>
         <label>Auth Username</label>
         <type>text</type>
-        <help>Username used when Authentication Mode is Basic.</help>
+        <help>Fallback username used when API Token is empty.</help>
     </field>
     <field>
         <id>general.auth_password</id>
         <label>Auth Password</label>
         <type>password</type>
-        <help>Password used when Authentication Mode is Basic.</help>
+        <help>Fallback password used when API Token is empty.</help>
     </field>
     <field>
         <id>general.auth_token</id>
         <label>Auth Token</label>
         <type>password</type>
-        <help>Bearer token used when Authentication Mode is Token.</help>
+        <help>Recommended: generate this in ntopng user settings API Token.</help>
     </field>
     <field>
         <id>general.auth_cookie</id>

@@ -145,7 +145,7 @@ class GeneralController extends ApiControllerBase
 	 * @param array $params Query string parameters
 	 * @return array
 	 */
-	protected function proxyRequest(string $endpoint, array $params): array
+	protected function proxyRequest(string $endpoint, array $params = []): array
 	{
 		try {
 			$endpoint = ltrim($endpoint, '/');
@@ -165,26 +165,32 @@ class GeneralController extends ApiControllerBase
 			}
 
 			$headers = ['Accept: application/json'];
-			$auth = $this->getAuthSettings();
+			$token = trim((string)($this->getModel()->auth_token ?? ''));
+			$cookieStr = '';
+
+			if ($token !== '') {
+				$headers[] = 'Authorization: Token ' . $token;
+			} else {
+				$cookieStr = $this->getNtopngSession();
+				if ($cookieStr === '') {
+					return [
+						'status' => 'error',
+						'message' => '请在设置页面配置 ntopng API Token 或用户名密码'
+					];
+				}
+			}
 
 			curl_setopt($ch, CURLOPT_URL, $url);
 			curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
 			curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
 			curl_setopt($ch, CURLOPT_TIMEOUT, 10);
 			curl_setopt($ch, CURLOPT_FAILONERROR, false);
-
-			if (!empty($auth['token'])) {
-				$headers[] = 'Authorization: Bearer ' . $auth['token'];
-			} elseif (!empty($auth['username'])) {
-				curl_setopt($ch, CURLOPT_HTTPAUTH, CURLAUTH_BASIC);
-				curl_setopt($ch, CURLOPT_USERPWD, $auth['username'] . ':' . $auth['password']);
-			}
-
-			if (!empty($auth['cookie'])) {
-				curl_setopt($ch, CURLOPT_COOKIE, $auth['cookie']);
-			}
+			curl_setopt($ch, CURLOPT_FOLLOWLOCATION, false);
 
 			curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+			if ($cookieStr !== '') {
+				curl_setopt($ch, CURLOPT_COOKIE, $cookieStr);
+			}
 
 			$responseRaw = curl_exec($ch);
 			$httpCode = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
@@ -200,11 +206,20 @@ class GeneralController extends ApiControllerBase
 
 			curl_close($ch);
 
-			$decoded = json_decode($responseRaw, true);
-			if (!is_array($decoded)) {
+			if ($httpCode === 302) {
+				syslog(LOG_ERR, 'AppIdentification: ntopng 认证失败(302)，请检查 Token 或账号密码');
 				return [
 					'status' => 'error',
-					'message' => 'Invalid JSON returned by ntopng.',
+					'message' => 'ntopng 认证失败，请检查 Settings 中的认证配置'
+				];
+			}
+
+			$decoded = json_decode($responseRaw, true);
+			if (json_last_error() !== JSON_ERROR_NONE || !is_array($decoded)) {
+				syslog(LOG_ERR, 'AppIdentification: ntopng 返回非 JSON 内容: ' . substr((string)$responseRaw, 0, 300));
+				return [
+					'status' => 'error',
+					'message' => 'Invalid JSON returned by ntopng',
 					'http_code' => $httpCode
 				];
 			}
@@ -235,16 +250,21 @@ class GeneralController extends ApiControllerBase
 	public function statusAction(): array
 	{
 		try {
-			$payload = $this->proxyRequest('get/system/info.lua', []);
+			$payload = $this->proxyRequest('flow/active.lua', [
+				'ifid' => $this->getIfid(),
+				'perPage' => 1
+			]);
 			if (($payload['status'] ?? '') === 'error') {
 				return $payload;
 			}
 
+			$totalRows = (int)($payload['rsp']['totalRows'] ?? 0);
+
 			return [
 				'status' => 'ok',
-				'version' => $this->extractVersion($payload),
+				'message' => sprintf('连接成功，当前活动流 %d 条', $totalRows),
+				'active_flows' => $totalRows,
 				'running' => true,
-				'interfaces' => $this->extractInterfaces($payload),
 				'data' => $payload
 			];
 		} catch (\Throwable $e) {
@@ -256,45 +276,50 @@ class GeneralController extends ApiControllerBase
 	}
 
 	/**
-	 * Read ntopng authentication settings from OPNsense config.
+	 * Create an ntopng session cookie for username/password fallback authentication.
 	 *
-	 * @return array
+	 * @return string
 	 */
-	private function getAuthSettings(): array
+	private function getNtopngSession(): string
 	{
-		$auth = [
-			'username' => '',
-			'password' => '',
-			'token' => '',
-			'cookie' => ''
-		];
-
 		try {
 			$model = $this->getModel();
-			$mode = strtolower(trim((string)$model->auth_mode));
+			$host = $this->getRestHost();
+			$port = $this->getRestPort();
+			$user = trim((string)($model->auth_username ?? 'admin'));
+			$pass = (string)($model->auth_password ?? '');
 
-			switch ($mode) {
-				case 'basic':
-					$auth['username'] = trim((string)$model->auth_username);
-					$auth['password'] = trim((string)$model->auth_password);
-					break;
-
-				case 'token':
-					$auth['token'] = trim((string)$model->auth_token);
-					break;
-
-				case 'cookie':
-					$auth['cookie'] = trim((string)$model->auth_cookie);
-					break;
-
-				default:
-					break;
+			if ($user === '' || $pass === '') {
+				return '';
 			}
-		} catch (\Throwable $e) {
-			return $auth;
-		}
 
-		return $auth;
+			$ch = curl_init(sprintf('%s://%s:%s/authorize.html', $this->getRestScheme(), $host, $port));
+			if ($ch === false) {
+				return '';
+			}
+
+			curl_setopt_array($ch, [
+				CURLOPT_POST => true,
+				CURLOPT_POSTFIELDS => http_build_query(['user' => $user, 'password' => $pass]),
+				CURLOPT_RETURNTRANSFER => true,
+				CURLOPT_HEADER => true,
+				CURLOPT_FOLLOWLOCATION => false,
+				CURLOPT_TIMEOUT => 10,
+			]);
+			$response = curl_exec($ch);
+			curl_close($ch);
+
+			if (!is_string($response) || strpos($response, 'wrong-credentials') !== false) {
+				syslog(LOG_ERR, 'AppIdentification: ntopng 用户名或密码错误');
+				return '';
+			}
+
+			preg_match('/Set-Cookie:\s*(session_' . preg_quote($port, '/') . '_\d+=[^;]+)/i', $response, $matches);
+			return $matches[1] ?? '';
+		} catch (\Throwable $e) {
+			syslog(LOG_ERR, 'AppIdentification: ntopng session login failed: ' . $e->getMessage());
+			return '';
+		}
 	}
 
 	/**
@@ -318,22 +343,33 @@ class GeneralController extends ApiControllerBase
 	 */
 	private function getRestBaseUrl(): string
 	{
-		$model = $this->getModel();
-		$scheme = strtolower(trim((string)$model->rest_scheme));
-		$host = trim((string)$model->rest_host);
-		$port = trim((string)$model->rest_port);
+		return sprintf('%s://%s:%s/lua/rest/v2/get/', $this->getRestScheme(), $this->getRestHost(), $this->getRestPort());
+	}
 
+	private function getRestScheme(): string
+	{
+		$scheme = strtolower(trim((string)($this->getModel()->rest_scheme ?? 'http')));
 		if ($scheme !== 'https') {
 			$scheme = 'http';
 		}
-		if ($host === '') {
-			$host = '127.0.0.1';
-		}
-		if ($port === '' || !is_numeric($port)) {
-			$port = '3000';
-		}
+		return $scheme;
+	}
 
-		return sprintf('%s://%s:%s/lua/rest/v2/', $scheme, $host, $port);
+	private function getRestHost(): string
+	{
+		$host = trim((string)($this->getModel()->rest_host ?? '127.0.0.1'));
+		return $host !== '' ? $host : '127.0.0.1';
+	}
+
+	private function getRestPort(): string
+	{
+		$port = trim((string)($this->getModel()->rest_port ?? '3000'));
+		return $port !== '' && is_numeric($port) ? $port : '3000';
+	}
+
+	protected function getIfid(): int
+	{
+		return (int)($this->getModel()->ifid ?? 0);
 	}
 
 	/**

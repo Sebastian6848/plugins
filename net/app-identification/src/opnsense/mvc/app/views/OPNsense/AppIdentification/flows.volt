@@ -263,6 +263,13 @@ All rights reserved.
 		loadApplicationOptions();
 		$('.selectpicker').selectpicker('refresh');
 		setAutoRefresh(true);
+
+		$(document).ajaxError(function (event, xhr, settings) {
+			if (settings && settings.url && settings.url.indexOf('/api/appidentification/') === 0) {
+				const msg = xhr.responseJSON ? xhr.responseJSON.message : "{{ lang._('网络请求失败') }}";
+				showApiError("{{ lang._('加载失败') }}", msg);
+			}
+		});
 	});
 </script>
 

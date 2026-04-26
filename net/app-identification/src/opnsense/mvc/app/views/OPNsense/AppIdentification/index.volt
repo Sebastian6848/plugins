@@ -16,6 +16,7 @@ All rights reserved.
 			<div class="col-md-12">
 				<hr />
 				<button class="btn btn-primary" id="saveAct" type="button"><b>{{ lang._('Save') }}</b> <i id="saveAct_progress"></i></button>
+				<button class="btn btn-default" id="testAct" type="button"><span class="fa fa-plug"></span> {{ lang._('Test Connection') }} <i id="testAct_progress"></i></button>
 				<button class="btn btn-default" id="restartAct" type="button"><span class="fa fa-refresh"></span> {{ lang._('Restart ntopng') }} <i id="restartAct_progress"></i></button>
 			</div>
 		</div>
@@ -52,16 +53,10 @@ $(document).ready(function() {
 	}
 
 	function toggleAuthFields() {
-		const mode = ($('#general\.auth_mode').val() || 'none').toLowerCase();
-		const rowUser = $('#general\.auth_username').closest('.form-group');
-		const rowPass = $('#general\.auth_password').closest('.form-group');
-		const rowToken = $('#general\.auth_token').closest('.form-group');
-		const rowCookie = $('#general\.auth_cookie').closest('.form-group');
-
-		rowUser.toggle(mode === 'basic');
-		rowPass.toggle(mode === 'basic');
-		rowToken.toggle(mode === 'token');
-		rowCookie.toggle(mode === 'cookie');
+		$('#general\\.auth_username').closest('.form-group').show();
+		$('#general\\.auth_password').closest('.form-group').show();
+		$('#general\\.auth_token').closest('.form-group').show();
+		$('#general\\.auth_cookie').closest('.form-group').hide();
 	}
 
 	const dataGetMap = {'frm_general_settings': '/api/appidentification/general/get'};
@@ -71,7 +66,7 @@ $(document).ready(function() {
 		toggleAuthFields();
 	});
 
-	$('#general\.auth_mode').on('change', function () {
+	$('#general\\.auth_mode').on('change', function () {
 		toggleAuthFields();
 	});
 
@@ -97,6 +92,40 @@ $(document).ready(function() {
 				});
 			}
 		});
+	});
+
+	$('#testAct').click(function() {
+		$('#testAct_progress').addClass('fa fa-spinner fa-pulse');
+		$.ajax({
+			url: '/api/appidentification/general/status',
+			method: 'GET',
+			dataType: 'json',
+			success: function(data) {
+				$('#testAct_progress').removeClass('fa fa-spinner fa-pulse');
+				if (!data || data.status === 'error') {
+					showApiError('{{ lang._('连接测试失败') }}', (data && data.message) ? data.message : '{{ lang._('Unable to connect to ntopng') }}');
+					return;
+				}
+				BootstrapDialog.show({
+					type: BootstrapDialog.TYPE_PRIMARY,
+					title: '{{ lang._('Success') }}',
+					message: $('<div/>').text(data.message || '{{ lang._('连接成功') }}').html(),
+					buttons: [{label: '{{ lang._('Close') }}', action: function(d){ d.close(); }}]
+				});
+			},
+			error: function(xhr) {
+				$('#testAct_progress').removeClass('fa fa-spinner fa-pulse');
+				const msg = xhr.responseJSON ? xhr.responseJSON.message : '{{ lang._('网络请求失败') }}';
+				showApiError('{{ lang._('连接测试失败') }}', msg);
+			}
+		});
+	});
+
+	$(document).ajaxError(function(event, xhr, settings) {
+		if (settings && settings.url && settings.url.indexOf('/api/appidentification/') === 0) {
+			const msg = xhr.responseJSON ? xhr.responseJSON.message : '{{ lang._('网络请求失败') }}';
+			showApiError('{{ lang._('加载失败') }}', msg);
+		}
 	});
 });
 </script>
