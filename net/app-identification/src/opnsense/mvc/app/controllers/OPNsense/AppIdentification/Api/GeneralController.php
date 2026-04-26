@@ -389,7 +389,8 @@ class GeneralController extends ApiControllerBase
 
 	protected function getIfid(): int
 	{
-		return (int)($this->getModel()->ifid ?? 0);
+		$ifid = trim((string)($this->getModel()->ifid ?? '0'));
+		return $ifid !== '' ? (int)$ifid : 0;
 	}
 
 	/**
