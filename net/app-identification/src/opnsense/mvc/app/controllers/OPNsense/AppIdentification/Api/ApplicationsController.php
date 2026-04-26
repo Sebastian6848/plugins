@@ -34,9 +34,7 @@ class ApplicationsController extends GeneralController
 	public function listAction(): array
 	{
 		try {
-			$params = ['ifid' => $this->getIfid()];
-
-			$payload = $this->proxyRequest('interface/l7/stats.lua', $params);
+			$payload = $this->fetchL7Stats();
 			if (($payload['status'] ?? '') === 'error' || (($payload['rc'] ?? 0) !== 0)) {
 				$flowPayload = $this->proxyRequest('flow/active.lua', [
 					'ifid' => $this->getIfid(),
@@ -49,6 +47,34 @@ class ApplicationsController extends GeneralController
 			}
 
 			$rows = [];
+			if (isset($payload['rsp']['labels']) && is_array($payload['rsp']['labels'])) {
+				$series = is_array($payload['rsp']['series'] ?? null) ? $payload['rsp']['series'] : [];
+				$totalBytes = 0;
+				foreach ($series as $value) {
+					$totalBytes += (int)$value;
+				}
+
+				foreach ($payload['rsp']['labels'] as $idx => $label) {
+					$bytes = (int)($series[$idx] ?? 0);
+					$rows[] = [
+						'name' => (string)$label,
+						'category' => 'L7',
+						'bytes' => $bytes,
+						'flows' => 0,
+						'up_bytes' => 0,
+						'down_bytes' => 0,
+						'percentage' => $totalBytes > 0 ? round($bytes / $totalBytes * 100, 1) : 0.0
+					];
+				}
+
+				return [
+					'status' => 'ok',
+					'rows' => $rows,
+					'total' => count($rows),
+					'data' => $payload
+				];
+			}
+
 			foreach ($this->extractApplicationRows($payload) as $item) {
 				$totalBytes = (int)$this->firstNumericValue([
 					$item['bytes'] ?? null,
@@ -110,6 +136,39 @@ class ApplicationsController extends GeneralController
 			return [
 				'status' => 'error',
 				'message' => sprintf('Unable to list application statistics: %s', $e->getMessage())
+			];
+		}
+	}
+
+	/**
+	 * Return ntopng L7 statistics in ApexCharts-compatible format.
+	 *
+	 * @return array
+	 */
+	public function getL7StatsAction(): array
+	{
+		try {
+			$result = $this->fetchL7Stats();
+			if (($result['status'] ?? '') === 'error') {
+				return $result;
+			}
+
+			if (($result['rc'] ?? -1) !== 0) {
+				return [
+					'status' => 'error',
+					'message' => (string)($result['rc_str_hr'] ?? $result['rc_str'] ?? 'Unable to load L7 statistics.'),
+					'data' => $result
+				];
+			}
+
+			return [
+				'status' => 'ok',
+				'data' => $result['rsp'] ?? []
+			];
+		} catch (\Throwable $e) {
+			return [
+				'status' => 'error',
+				'message' => sprintf('Unable to retrieve L7 statistics: %s', $e->getMessage())
 			];
 		}
 	}
@@ -322,6 +381,19 @@ class ApplicationsController extends GeneralController
 	private function readCustomRules(): array
 	{
 		return $this->buildRuleEntries($this->readRawRuleLines());
+	}
+
+	/**
+	 * Fetch L7 protocol statistics from ntopng.
+	 *
+	 * @return array
+	 */
+	private function fetchL7Stats(): array
+	{
+		return $this->proxyRequest('interface/l7/stats.lua', [
+			'ifid' => $this->getIfid(),
+			'ndpistats_mode' => 'sinceStartup',
+		]);
 	}
 
 	/**

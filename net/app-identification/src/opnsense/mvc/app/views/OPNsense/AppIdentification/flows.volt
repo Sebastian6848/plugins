@@ -24,12 +24,111 @@ All rights reserved.
 }
 /* 确保下拉菜单始终在最顶层 */
 .dropdown-menu {
-	z-index: 9999 !important;
+	z-index: 1035 !important;
 }
 .flow-dropdown-menu-detached {
 	display: block !important;
 	position: absolute !important;
-	z-index: 9999 !important;
+	z-index: 1035 !important;
+}
+.flow-actions-dropdown {
+	display: inline-block;
+}
+.flow-actions-menu,
+.flow-dropdown-menu-detached.flow-actions-menu {
+	float: none !important;
+	min-width: 116px !important;
+	width: auto !important;
+	max-width: 150px !important;
+	padding: 4px 0 !important;
+	font-size: 12px;
+	line-height: 1.4;
+	border-radius: 4px;
+	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
+}
+.flow-actions-menu > li > a {
+	padding: 5px 12px !important;
+	white-space: nowrap;
+}
+.flow-actions-menu > li.disabled > a,
+.flow-actions-menu > li.disabled > a:hover,
+.flow-actions-menu > li.disabled > a:focus {
+	color: #999;
+	cursor: not-allowed;
+	background: transparent;
+}
+.flow-detail-dialog .modal-dialog {
+	width: calc(100vw - 80px);
+	max-width: 1280px;
+}
+.flow-detail-dialog .modal-body {
+	max-height: calc(100vh - 170px);
+	overflow: auto;
+	padding: 0;
+}
+.flow-detail-title {
+	font-weight: 600;
+}
+.flow-detail-wrap {
+	padding: 8px 10px 12px;
+}
+.flow-detail-table {
+	width: 100%;
+	border-collapse: collapse;
+	table-layout: fixed;
+}
+.flow-detail-table th,
+.flow-detail-table td {
+	border: 1px solid #ddd;
+	padding: 8px;
+	vertical-align: top;
+	word-break: break-word;
+}
+.flow-detail-table th {
+	width: 210px;
+	background: #f1f1f1;
+	color: #111;
+}
+.flow-detail-table td {
+	background: #fff;
+}
+.flow-detail-table tr:nth-child(even) td {
+	background: #f7f7f7;
+}
+.flow-detail-peer {
+	color: #06f;
+}
+.flow-detail-badge {
+	display: inline-block;
+	min-width: 18px;
+	padding: 1px 5px;
+	margin-left: 4px;
+	border-radius: 3px;
+	background: #159957;
+	color: #fff;
+	font-size: 11px;
+	text-align: center;
+}
+.flow-detail-bar {
+	display: flex;
+	height: 14px;
+	margin-top: 6px;
+	overflow: hidden;
+	border-radius: 4px;
+	background: #e5e5e5;
+}
+.flow-detail-bar span {
+	color: #fff;
+	font-size: 10px;
+	line-height: 14px;
+	text-align: center;
+	white-space: nowrap;
+}
+.flow-detail-bar-client {
+	background: #f0ad00;
+}
+.flow-detail-bar-server {
+	background: #159957;
 }
 </style>
 
@@ -95,6 +194,91 @@ All rights reserved.
 			return $('<div/>').text(value === null || value === undefined ? '' : String(value)).html();
 		}
 
+		function humanBytes(bytes) {
+			let value = Number(bytes || 0);
+			const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+			let idx = 0;
+			while (value >= 1024 && idx < units.length - 1) {
+				value /= 1024;
+				idx += 1;
+			}
+			return value.toFixed(idx === 0 ? 0 : 2) + ' ' + units[idx];
+		}
+
+		function humanDuration(seconds) {
+			let value = Number(seconds || 0);
+			if (value < 1) {
+				return '< 1 sec';
+			}
+			value = Math.round(value);
+			const hours = Math.floor(value / 3600);
+			const minutes = Math.floor((value % 3600) / 60);
+			const remain = value % 60;
+			if (hours > 0) {
+				return hours + 'h ' + minutes + 'm ' + remain + 's';
+			}
+			if (minutes > 0) {
+				return minutes + 'm ' + remain + 's';
+			}
+			return remain + ' sec';
+		}
+
+		function humanTime(timestamp) {
+			const value = Number(timestamp || 0);
+			if (value <= 0) {
+				return '';
+			}
+			return new Date(value * 1000).toLocaleString();
+		}
+
+		function endpointLabel(endpoint) {
+			if (!endpoint || typeof endpoint !== 'object') {
+				return '';
+			}
+			const name = endpoint.name || endpoint.ip || '';
+			const port = endpoint.port ? ':' + endpoint.port : '';
+			return bootstrapSafe(name + port);
+		}
+
+		function restoreDetachedFlowMenu(dropdown) {
+			if (!dropdown || dropdown.length === 0) {
+				return;
+			}
+
+			const menu = dropdown.data('detached-menu');
+			const placeholder = dropdown.data('menu-placeholder');
+			if (menu && menu.length > 0 && placeholder && placeholder.length > 0) {
+				menu.removeClass('flow-dropdown-menu-detached').removeAttr('style');
+				menu.removeData('owning-dropdown');
+				placeholder.replaceWith(menu);
+			}
+
+			dropdown.removeClass('open');
+			dropdown.removeData('detached-menu');
+			dropdown.removeData('menu-placeholder');
+		}
+
+		function closeFlowActionMenu(link) {
+			const owner = $(link).closest('.dropdown-menu').data('owning-dropdown');
+			if (owner && owner.length > 0) {
+				restoreDetachedFlowMenu(owner);
+			}
+		}
+
+		function closeAllFlowActionMenus() {
+			gridFlows.find('.dropdown.open').each(function () {
+				restoreDetachedFlowMenu($(this));
+			});
+			$('body > .flow-dropdown-menu-detached').each(function () {
+				const owner = $(this).data('owning-dropdown');
+				if (owner && owner.length > 0) {
+					restoreDetachedFlowMenu(owner);
+				} else {
+					$(this).remove();
+				}
+			});
+		}
+
 		function positionDetachedFlowMenu(dropdown) {
 			const menu = dropdown.data('detached-menu');
 			if (!menu || menu.length === 0) {
@@ -127,19 +311,53 @@ All rights reserved.
 			});
 
 			gridFlows.off('hidden.bs.dropdown.flowmenu').on('hidden.bs.dropdown.flowmenu', '.dropdown', function () {
-				const dropdown = $(this);
-				const menu = dropdown.data('detached-menu');
-				const placeholder = dropdown.data('menu-placeholder');
-
-				if (menu && menu.length > 0 && placeholder && placeholder.length > 0) {
-					menu.removeClass('flow-dropdown-menu-detached').removeAttr('style');
-					menu.removeData('owning-dropdown');
-					placeholder.replaceWith(menu);
-				}
-
-				dropdown.removeData('detached-menu');
-				dropdown.removeData('menu-placeholder');
+				restoreDetachedFlowMenu($(this));
 			});
+		}
+
+		function renderFlowDetail(data) {
+			const detail = data.detail || {};
+			const row = data.row || {};
+			const client = detail.client || {};
+			const server = detail.server || {};
+			const protocol = detail.protocol || {};
+			const thpt = detail.thpt || {};
+			const breakdown = detail.breakdown || {};
+			const clientPct = Math.max(0, Math.min(100, Number(breakdown.cli2srv || 0)));
+			const serverPct = Math.max(0, Math.min(100, Number(breakdown.srv2cli || (100 - clientPct))));
+			const totalBytes = Number(detail.bytes || row.bytes_raw || 0);
+			const l4 = protocol.l4 || row.l4_proto || '';
+			const l7 = protocol.l7 || row.l7_proto || row.info || '';
+			const title = (endpointLabel(client) || row.client || '') + ' ⇄ ' + (endpointLabel(server) || row.server || '');
+			const clientBytes = Math.round(totalBytes * clientPct / 100);
+			const serverBytes = Math.max(0, totalBytes - clientBytes);
+
+			let html = '';
+			html += '<div class="flow-detail-wrap">';
+			html += '<table class="flow-detail-table">';
+			html += '<tbody>';
+			html += '<tr><th>{{ lang._("流 Peers [客户端/服务器]") }}</th><td colspan="2"><span class="flow-detail-peer">' + title + '</span></td></tr>';
+			html += '<tr><th>{{ lang._("协议 / 应用程序") }}</th><td colspan="2">' + bootstrapSafe(l4 || '-') + ' / <span class="flow-detail-peer">' + bootstrapSafe(l7 || '-') + '</span><span class="flow-detail-badge">DPI</span></td></tr>';
+			html += '<tr><th>{{ lang._("首先/最后查看") }}</th><td>' + bootstrapSafe(humanTime(detail.first_seen)) + '</td><td>' + bootstrapSafe(humanTime(detail.last_seen)) + '</td></tr>';
+			html += '<tr><th>Flow Duration</th><td colspan="2">' + bootstrapSafe(humanDuration(detail.duration)) + '</td></tr>';
+			html += '<tr><th>{{ lang._("总流量") }}</th><td>{{ lang._("总计") }}: ' + bootstrapSafe(humanBytes(totalBytes)) + '</td><td>' + bootstrapSafe(Number(thpt.bps || 0).toFixed(2)) + ' bps</td></tr>';
+			html += '<tr><th></th><td>{{ lang._("客户端") }} ➜ {{ lang._("服务器") }}: ' + bootstrapSafe(humanBytes(clientBytes)) + '</td><td>{{ lang._("服务器") }} ➜ {{ lang._("客户端") }}: ' + bootstrapSafe(humanBytes(serverBytes)) + '</td></tr>';
+			html += '<tr><th></th><td colspan="2"><div class="flow-detail-bar">';
+			html += '<span class="flow-detail-bar-client" style="width:' + clientPct + '%">' + bootstrapSafe(endpointLabel(client) || row.client || '') + '</span>';
+			html += '<span class="flow-detail-bar-server" style="width:' + serverPct + '%">' + bootstrapSafe(endpointLabel(server) || row.server || '') + '</span>';
+			html += '</div></td></tr>';
+			html += '<tr><th>VLAN / Hash</th><td>' + bootstrapSafe(detail.vlan || 0) + '</td><td>' + bootstrapSafe(detail.hash_id || detail.key || row.flow_key || '') + '</td></tr>';
+			html += '<tr><th>{{ lang._("吞吐量") }}</th><td colspan="2">' + bootstrapSafe(row.throughput || (Number(thpt.bps || 0).toFixed(2) + ' bps')) + ' / ' + bootstrapSafe(Number(thpt.pps || 0).toFixed(2)) + ' pps</td></tr>';
+			html += '<tr><th>TCP Flags</th><td colspan="2">' + bootstrapSafe(detail.tcp_flags || '-') + '</td></tr>';
+			html += '<tr><th>{{ lang._("客户端") }}</th><td colspan="2">' + endpointLabel(client) + ' | IP: ' + bootstrapSafe(client.ip || '') + ' | Port: ' + bootstrapSafe(client.port || '') + '</td></tr>';
+			html += '<tr><th>{{ lang._("服务器") }}</th><td colspan="2">' + endpointLabel(server) + ' | IP: ' + bootstrapSafe(server.ip || '') + ' | Port: ' + bootstrapSafe(server.port || '') + '</td></tr>';
+			html += '</tbody>';
+			html += '</table>';
+			html += '</div>';
+			return {
+				title: '<span class="flow-detail-title"><span class="fa fa-navicon"></span> {{ lang._("流") }}: ' + title + ' | {{ lang._("概述") }}</span>',
+				body: html
+			};
 		}
 
 		function loadApplicationOptions() {
@@ -175,6 +393,7 @@ All rights reserved.
 				return;
 			}
 
+			closeAllFlowActionMenus();
 			ajaxCall('/api/appidentification/flows/getFlowDetail', {flow_key: flowKey}, function (data) {
 				if (!data || data.status === 'error') {
 					const backendMessage = (data && data.message) ? data.message : "{{ lang._('Unable to retrieve flow details') }}";
@@ -183,11 +402,12 @@ All rights reserved.
 					return;
 				}
 
-				const detailText = JSON.stringify(data.detail || data, null, 2);
+				const detailView = renderFlowDetail(data);
 				BootstrapDialog.show({
 					type: BootstrapDialog.TYPE_INFO,
-					title: "{{ lang._('Flow Detail') }}",
-					message: '<pre style="max-height:420px; overflow:auto;">' + bootstrapSafe(detailText) + '</pre>',
+					cssClass: 'flow-detail-dialog',
+					title: detailView.title,
+					message: detailView.body,
 					buttons: [{
 						label: "{{ lang._('Close') }}",
 						action: function (dialog) {
@@ -244,14 +464,14 @@ All rights reserved.
 					commands: function (column, row) {
 						const flowKey = bootstrapSafe(row.flow_key || '');
 						let buttons = '';
-						buttons += '<div class="dropdown">';
+						buttons += '<div class="dropdown flow-actions-dropdown">';
 						buttons += '<button class="btn btn-default btn-xs dropdown-toggle" type="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">';
 						buttons += '<span class="fa fa-navicon"></span> <span class="caret"></span>';
 						buttons += '</button>';
-						buttons += '<ul class="dropdown-menu dropdown-menu-right pull-right" role="menu">';
+						buttons += '<ul class="dropdown-menu flow-actions-menu" role="menu">';
 						if (flowKey !== '') {
 							buttons += '<li><a href="#" class="flow-info-btn" data-action="detail" data-flow-key="' + flowKey + '"><span class="fa fa-info-circle"></span> {{ lang._("信息") }}</a></li>';
-							buttons += '<li><a href="#" class="flow-chart-btn" data-action="chart" data-flow-key="' + flowKey + '"><span class="fa fa-bar-chart"></span> {{ lang._("图表") }}</a></li>';
+							buttons += '<li class="disabled"><a href="#" class="flow-chart-btn" data-action="chart" data-flow-key="' + flowKey + '"><span class="fa fa-bar-chart"></span> {{ lang._("图表") }}</a></li>';
 						} else {
 							buttons += '<li><a href="#" data-action="expired"><span class="fa fa-clock-o"></span> {{ lang._("流已过期") }}</a></li>';
 						}
@@ -271,20 +491,17 @@ All rights reserved.
 
 			gridFlows.find('a[data-action=detail]').off('click').on('click', function (event) {
 				event.preventDefault();
-				const owner = $(this).closest('.dropdown-menu').data('owning-dropdown');
-				if (owner && owner.length > 0) {
-					owner.find('.dropdown-toggle').dropdown('toggle');
-				}
+				closeFlowActionMenu(this);
 				showFlowDetail($(this).data('flow-key'));
 			});
 
 			gridFlows.find('a[data-action=chart]').off('click').on('click', function (event) {
 				event.preventDefault();
-				const flowKey = $(this).data('flow-key');
-				const owner = $(this).closest('.dropdown-menu').data('owning-dropdown');
-				if (owner && owner.length > 0) {
-					owner.find('.dropdown-toggle').dropdown('toggle');
+				if ($(this).parent().hasClass('disabled')) {
+					return;
 				}
+				const flowKey = $(this).data('flow-key');
+				closeFlowActionMenu(this);
 				BootstrapDialog.show({
 					type: BootstrapDialog.TYPE_INFO,
 					title: "{{ lang._('图表') }}",
@@ -300,10 +517,7 @@ All rights reserved.
 
 			gridFlows.find('a[data-action=expired]').off('click').on('click', function (event) {
 				event.preventDefault();
-				const owner = $(this).closest('.dropdown-menu').data('owning-dropdown');
-				if (owner && owner.length > 0) {
-					owner.find('.dropdown-toggle').dropdown('toggle');
-				}
+				closeFlowActionMenu(this);
 				showApiError("{{ lang._('获取流详情失败') }}", "{{ lang._('流已过期') }}");
 			});
 		});

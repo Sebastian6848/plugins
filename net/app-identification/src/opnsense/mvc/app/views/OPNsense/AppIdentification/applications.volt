@@ -9,7 +9,7 @@ All rights reserved.
 	$(document).ready(function () {
 		'use strict';
 
-		let appChart = null;
+		let l7Chart = null;
 
 		function showApiError(title, message, retryFn) {
 			const buttons = [{
@@ -42,10 +42,13 @@ All rights reserved.
 			return $('<div/>').text(value === null || value === undefined ? '' : String(value)).html();
 		}
 
-		function humanBytes(bytes) {
+		function bytesToSize(bytes) {
 			let value = Number(bytes || 0);
 			const units = ['B', 'KB', 'MB', 'GB', 'TB'];
 			let idx = 0;
+			if (value === 0) {
+				return '0 B';
+			}
 			while (value >= 1024 && idx < units.length - 1) {
 				value /= 1024;
 				idx += 1;
@@ -53,101 +56,129 @@ All rights reserved.
 			return value.toFixed(2) + ' ' + units[idx];
 		}
 
-		function renderTopChart(rows) {
-			const topRows = rows
-				.slice()
-				.sort(function (a, b) {
-					return Number(b.bytes || 0) - Number(a.bytes || 0);
-				})
-				.slice(0, 10);
-
-			const labels = topRows.map(function (row) {
-				return row.name || '{{ lang._('Unknown') }}';
-			});
-			const data = topRows.map(function (row) {
-				return Number(row.bytes || 0);
-			});
-
-			const colors = ['#2f7ed8', '#0d233a', '#8bbc21', '#910000', '#1aadce', '#492970', '#f28f43', '#77a1e5', '#c42525', '#a6c96a'];
-			const ctx = document.getElementById('app-top10-chart').getContext('2d');
-
-			if (appChart !== null) {
-				appChart.destroy();
-			}
-
-			appChart = new Chart(ctx, {
-				type: 'bar',
-				data: {
-					labels: labels,
-					datasets: [{
-						label: '{{ lang._('Total Traffic') }}',
-						data: data,
-						backgroundColor: colors.slice(0, labels.length),
-						borderWidth: 0
-					}]
-				},
-				options: {
-					responsive: true,
-					maintainAspectRatio: false,
-					legend: {
-						display: false
-					},
-					scales: {
-						yAxes: [{
-							ticks: {
-								beginAtZero: true,
-								callback: function (value) {
-									return humanBytes(value);
-								}
-							}
-						}]
-					},
-					tooltips: {
-						callbacks: {
-							label: function (tooltipItem) {
-								return '{{ lang._('Traffic') }}: ' + humanBytes(tooltipItem.yLabel);
-							}
-						}
-					}
-				}
-			});
-		}
-
-		function renderApplicationTable(rows) {
+		function loadAppList(data) {
 			const tbody = $('#app-list-body');
 			tbody.empty();
 
-			if (!Array.isArray(rows) || rows.length === 0) {
-				tbody.append('<tr><td colspan="6">{{ lang._('No application data available') }}</td></tr>');
+			if (!data || !Array.isArray(data.labels) || data.labels.length === 0) {
+				tbody.append('<tr><td colspan="3" class="text-center text-muted">{{ lang._('暂无数据') }}</td></tr>');
 				return;
 			}
 
-			rows.sort(function (a, b) {
-				return Number(b.bytes || 0) - Number(a.bytes || 0);
+			const series = Array.isArray(data.series) ? data.series : [];
+			const total = series.reduce(function (sum, value) {
+				return sum + Number(value || 0);
+			}, 0);
+			let rows = '';
+
+			data.labels.forEach(function (label, idx) {
+				const bytes = Number(series[idx] || 0);
+				const percent = total > 0 ? (bytes / total * 100).toFixed(1) : '0.0';
+				rows += '<tr>' +
+					'<td>' + esc(label) + '</td>' +
+					'<td>' + esc(bytesToSize(bytes)) + '</td>' +
+					'<td>' + esc(percent + '%') + '</td>' +
+					'</tr>';
 			});
 
-			rows.forEach(function (row) {
-				const tr = '<tr>' +
-					'<td>' + esc(row.name || '') + '</td>' +
-					'<td>' + esc(row.category || 'Uncategorized') + '</td>' +
-					'<td>' + esc(row.flows || 0) + '</td>' +
-					'<td>' + esc(humanBytes(row.bytes || 0)) + '</td>' +
-					'<td>' + esc(humanBytes(row.up_bytes || 0)) + '</td>' +
-					'<td>' + esc(humanBytes(row.down_bytes || 0)) + '</td>' +
-					'</tr>';
-				tbody.append(tr);
-			});
+			tbody.html(rows);
 		}
 
-		function loadApplications() {
-			ajaxCall('/api/appidentification/applications/list', {}, function (data) {
-				if (!data || data.status === 'error') {
-					showApiError('{{ lang._('加载应用数据失败') }}', (data && data.message) ? data.message : '{{ lang._('Unable to load application data') }}', loadApplications);
+		function renderL7Chart(data) {
+			if (l7Chart !== null && typeof l7Chart.destroy === 'function') {
+				l7Chart.destroy();
+				l7Chart = null;
+			}
+
+			if (!data || !Array.isArray(data.labels) || data.labels.length === 0) {
+				$('#l7-chart').html('<p class="text-muted text-center">{{ lang._('暂无应用流量数据') }}</p>');
+				return;
+			}
+
+			$('#l7-chart').html('');
+
+			if (typeof ApexCharts === 'undefined') {
+				if (typeof Chart === 'undefined') {
+					$('#l7-chart').html('<p class="text-muted text-center">{{ lang._('图表组件未加载，无法显示图表') }}</p>');
 					return;
 				}
-				const rows = (data && Array.isArray(data.rows)) ? data.rows : [];
-				renderTopChart(rows);
-				renderApplicationTable(rows);
+
+				$('#l7-chart').html('<canvas id="l7-chart-canvas" style="height:300px;"></canvas>');
+				l7Chart = new Chart(document.getElementById('l7-chart-canvas').getContext('2d'), {
+					type: 'doughnut',
+					data: {
+						labels: data.labels || [],
+						datasets: [{
+							data: data.series || [],
+							backgroundColor: data.colors || undefined,
+							borderWidth: 0
+						}]
+					},
+					options: {
+						responsive: true,
+						maintainAspectRatio: false,
+						plugins: {
+							legend: {
+								position: 'bottom'
+							},
+							tooltip: {
+								callbacks: {
+									label: function (context) {
+										return context.label + ': ' + bytesToSize(context.parsed);
+									}
+								}
+							}
+						}
+					}
+				});
+				return;
+			}
+
+			const options = {
+				chart: {
+					type: 'donut',
+					height: 300
+				},
+				series: data.series || [],
+				labels: data.labels || [],
+				colors: data.colors || undefined,
+				tooltip: {
+					y: {
+						formatter: function (val) {
+							return bytesToSize(val);
+						}
+					}
+				},
+				legend: {
+					position: 'bottom'
+				},
+				dataLabels: {
+					formatter: function (val, opts) {
+						return opts.w.globals.labels[opts.seriesIndex] + ': ' + val.toFixed(1) + '%';
+					}
+				}
+			};
+
+			l7Chart = new ApexCharts(document.querySelector('#l7-chart'), options);
+			l7Chart.render();
+		}
+
+		function loadL7Chart() {
+			ajaxCall('/api/appidentification/applications/getL7Stats', {}, function (response) {
+				if (!response || response.status === 'error') {
+					showApiError('{{ lang._('加载应用数据失败') }}', (response && response.message) ? response.message : '{{ lang._('Unable to load application data') }}', loadL7Chart);
+					return;
+				}
+
+				const data = response.data || {};
+				if (!data.labels) {
+					$('#l7-chart').html('<p class="text-muted text-center">{{ lang._('暂无应用流量数据') }}</p>');
+					loadAppList(data);
+					return;
+				}
+
+				renderL7Chart(data);
+				loadAppList(data);
 			});
 		}
 
@@ -251,7 +282,7 @@ All rights reserved.
 					$saveButton.prop('disabled', false);
 					$('#DialogRule').modal('hide');
 					loadRules();
-					loadApplications();
+					loadL7Chart();
 				}, function () {
 					$saveButton.prop('disabled', false);
 				});
@@ -288,7 +319,7 @@ All rights reserved.
 						}
 						applyRulesAfterSave(function () {
 							loadRules();
-							loadApplications();
+							loadL7Chart();
 						});
 					});
 				}
@@ -296,18 +327,18 @@ All rights reserved.
 		});
 
 		$('#reload-app-data').on('click', function () {
-			loadApplications();
+			loadL7Chart();
 			loadRules();
 		});
 
 		$('#applyRulesAct').SimpleActionButton({
 			onAction: function () {
 				loadRules();
-				loadApplications();
+				loadL7Chart();
 			}
 		});
 
-		loadApplications();
+		loadL7Chart();
 		loadRules();
 
 		$(document).ajaxError(function (event, xhr, settings) {
@@ -323,9 +354,7 @@ All rights reserved.
 	<div class="row">
 		<div class="col-md-12">
 			<h3>{{ lang._('Top 10 应用流量分布') }}</h3>
-			<div style="height: 300px;">
-				<canvas id="app-top10-chart"></canvas>
-			</div>
+			<div id="l7-chart" style="min-height:300px;"></div>
 		</div>
 	</div>
 
@@ -343,11 +372,8 @@ All rights reserved.
 				<thead>
 				<tr>
 					<th>{{ lang._('应用名称') }}</th>
-					<th>{{ lang._('分类') }}</th>
-					<th>{{ lang._('流数量') }}</th>
 					<th>{{ lang._('总流量') }}</th>
-					<th>{{ lang._('上行') }}</th>
-					<th>{{ lang._('下行') }}</th>
+					<th>{{ lang._('占比') }}</th>
 				</tr>
 				</thead>
 				<tbody id="app-list-body"></tbody>
