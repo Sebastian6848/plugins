@@ -16,8 +16,19 @@ All rights reserved.
 .table-responsive {
 	overflow: visible !important;
 }
+#flow_filters,
+#flow_filters .content-box,
+#flow_filters .bootgrid-header,
+#flow_filters .bootgrid-footer {
+	overflow: visible !important;
+}
 /* 确保下拉菜单始终在最顶层 */
 .dropdown-menu {
+	z-index: 9999 !important;
+}
+.flow-dropdown-menu-detached {
+	display: block !important;
+	position: absolute !important;
 	z-index: 9999 !important;
 }
 </style>
@@ -82,6 +93,53 @@ All rights reserved.
 
 		function bootstrapSafe(value) {
 			return $('<div/>').text(value === null || value === undefined ? '' : String(value)).html();
+		}
+
+		function positionDetachedFlowMenu(dropdown) {
+			const menu = dropdown.data('detached-menu');
+			if (!menu || menu.length === 0) {
+				return;
+			}
+
+			const button = dropdown.find('.dropdown-toggle');
+			const offset = button.offset();
+			const menuWidth = menu.outerWidth();
+			const left = Math.max(8, offset.left + button.outerWidth() - menuWidth);
+
+			menu.css({
+				top: offset.top + button.outerHeight(),
+				left: left
+			});
+		}
+
+		function installDetachedFlowDropdowns() {
+			gridFlows.off('show.bs.dropdown.flowmenu').on('show.bs.dropdown.flowmenu', '.dropdown', function () {
+				const dropdown = $(this);
+				const menu = dropdown.children('.dropdown-menu');
+				const placeholder = $('<span class="flow-dropdown-placeholder" style="display:none;"></span>');
+
+				dropdown.data('menu-placeholder', placeholder);
+				dropdown.data('detached-menu', menu);
+				menu.data('owning-dropdown', dropdown);
+				menu.after(placeholder);
+				menu.addClass('flow-dropdown-menu-detached').appendTo('body');
+				positionDetachedFlowMenu(dropdown);
+			});
+
+			gridFlows.off('hidden.bs.dropdown.flowmenu').on('hidden.bs.dropdown.flowmenu', '.dropdown', function () {
+				const dropdown = $(this);
+				const menu = dropdown.data('detached-menu');
+				const placeholder = dropdown.data('menu-placeholder');
+
+				if (menu && menu.length > 0 && placeholder && placeholder.length > 0) {
+					menu.removeClass('flow-dropdown-menu-detached').removeAttr('style');
+					menu.removeData('owning-dropdown');
+					placeholder.replaceWith(menu);
+				}
+
+				dropdown.removeData('detached-menu');
+				dropdown.removeData('menu-placeholder');
+			});
 		}
 
 		function loadApplicationOptions() {
@@ -209,15 +267,24 @@ All rights reserved.
 		}).on('loaded.rs.jquery.bootgrid', function () {
 			$(this).closest('.table-responsive').css('overflow', 'visible');
 			$(this).closest('.bootgrid-table').css('overflow', 'visible');
+			installDetachedFlowDropdowns();
 
 			gridFlows.find('a[data-action=detail]').off('click').on('click', function (event) {
 				event.preventDefault();
+				const owner = $(this).closest('.dropdown-menu').data('owning-dropdown');
+				if (owner && owner.length > 0) {
+					owner.find('.dropdown-toggle').dropdown('toggle');
+				}
 				showFlowDetail($(this).data('flow-key'));
 			});
 
 			gridFlows.find('a[data-action=chart]').off('click').on('click', function (event) {
 				event.preventDefault();
 				const flowKey = $(this).data('flow-key');
+				const owner = $(this).closest('.dropdown-menu').data('owning-dropdown');
+				if (owner && owner.length > 0) {
+					owner.find('.dropdown-toggle').dropdown('toggle');
+				}
 				BootstrapDialog.show({
 					type: BootstrapDialog.TYPE_INFO,
 					title: "{{ lang._('图表') }}",
@@ -233,7 +300,17 @@ All rights reserved.
 
 			gridFlows.find('a[data-action=expired]').off('click').on('click', function (event) {
 				event.preventDefault();
+				const owner = $(this).closest('.dropdown-menu').data('owning-dropdown');
+				if (owner && owner.length > 0) {
+					owner.find('.dropdown-toggle').dropdown('toggle');
+				}
 				showApiError("{{ lang._('获取流详情失败') }}", "{{ lang._('流已过期') }}");
+			});
+		});
+
+		$(window).on('scroll.flowmenu resize.flowmenu', function () {
+			gridFlows.find('.dropdown.open').each(function () {
+				positionDetachedFlowMenu($(this));
 			});
 		});
 
