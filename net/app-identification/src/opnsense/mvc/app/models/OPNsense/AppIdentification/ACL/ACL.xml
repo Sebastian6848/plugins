@@ -1,0 +1,9 @@
+<acl>
+	<page-services-app-identification>
+		<name>Services: Application Identification</name>
+		<patterns>
+			<pattern>ui/appidentification/*</pattern>
+			<pattern>api/appidentification/*</pattern>
+		</patterns>
+	</page-services-app-identification>
+</acl>

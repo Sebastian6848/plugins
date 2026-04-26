@@ -1,0 +1,67 @@
+<form>
+    <field>
+        <id>general.enabled</id>
+        <label>Enable ntopng</label>
+        <type>checkbox</type>
+        <help>Enable ntopng service managed by App Identification plugin.</help>
+    </field>
+    <field>
+        <id>general.interfaces</id>
+        <label>Interfaces</label>
+        <type>select_multiple</type>
+        <advanced>true</advanced>
+        <help>Select interfaces to monitor. Leave empty to choose from ntopng UI.</help>
+    </field>
+    <field>
+        <id>general.http_port</id>
+        <label>HTTP Port</label>
+        <type>text</type>
+        <help>HTTP port used by ntopng.</help>
+    </field>
+    <field>
+        <id>general.https_port</id>
+        <label>HTTPS Port</label>
+        <type>text</type>
+        <help>HTTPS port used by ntopng. Configure certificate when enabled.</help>
+    </field>
+    <field>
+        <id>general.certificate</id>
+        <label>Certificate</label>
+        <type>dropdown</type>
+        <help>Certificate used by ntopng HTTPS endpoint.</help>
+    </field>
+    <field>
+        <id>general.dns_mode</id>
+        <label>DNS Mode</label>
+        <type>dropdown</type>
+        <help>DNS resolution mode used by ntopng.</help>
+    </field>
+    <field>
+        <id>general.max_flows</id>
+        <label>Maximum Flows</label>
+        <type>text</type>
+        <advanced>true</advanced>
+        <help>Maximum number of concurrent flows managed by ntopng.</help>
+    </field>
+    <field>
+        <id>general.max_hosts</id>
+        <label>Maximum Hosts</label>
+        <type>text</type>
+        <advanced>true</advanced>
+        <help>Maximum number of hosts managed by ntopng.</help>
+    </field>
+    <field>
+        <id>general.local_networks</id>
+        <label>Local Networks</label>
+        <type>text</type>
+        <advanced>true</advanced>
+        <help>Comma separated local network definitions, for example 192.168.1.0/24,10.0.0.0/8.</help>
+    </field>
+    <field>
+        <id>general.extra_options</id>
+        <label>Extra Options</label>
+        <type>textarea</type>
+        <advanced>true</advanced>
+        <help>Additional ntopng command line options, one option per line.</help>
+    </field>
+</form>

@@ -1,0 +1,6 @@
+This plugin provides an application identification visualization interface for OPNsense,
+powered by ntopng REST API data. It offers a native OPNsense-style dashboard for
+viewing traffic flows and Layer-7 application insights without modifying ntopng itself.
+
+This plugin is an enhanced replacement for os-ntopng. Please uninstall os-ntopng
+before installing this plugin to avoid conflicts.

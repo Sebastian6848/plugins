@@ -1,0 +1,22 @@
+<form>
+    <field>
+        <id>rule.host</id>
+        <label>Host</label>
+        <type>text</type>
+        <help>Host, domain, IP or CIDR to match.</help>
+    </field>
+    <field>
+        <id>rule.application</id>
+        <label>Application Name</label>
+        <type>text</type>
+        <help>Custom application name mapped to the host match.</help>
+    </field>
+    <field>
+        <id>rule.index</id>
+        <type>hidden</type>
+    </field>
+    <field>
+        <id>rule.action</id>
+        <type>hidden</type>
+    </field>
+</form>

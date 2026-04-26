@@ -1,0 +1,69 @@
+<model>
+	<mount>//OPNsense/AppIdentification/general</mount>
+	<description>AppIdentification ntopng configuration</description>
+	<version>1.0.0</version>
+	<items>
+		<enabled type="BooleanField">
+			<Default>0</Default>
+			<Required>Y</Required>
+		</enabled>
+		<interfaces type="InterfaceField">
+			<Required>N</Required>
+			<Multiple>Y</Multiple>
+			<AllowDynamic>Y</AllowDynamic>
+		</interfaces>
+		<http_port type="PortField">
+			<Required>Y</Required>
+			<Default>3000</Default>
+		</http_port>
+		<https_port type="PortField">
+			<Required>N</Required>
+			<Constraints>
+				<check001>
+					<ValidationMessage>Please select a HTTPS port and a valid certificate</ValidationMessage>
+					<type>AllOrNoneConstraint</type>
+					<addFields>
+						<field1>certificate</field1>
+					</addFields>
+				</check001>
+			</Constraints>
+		</https_port>
+		<dns_mode type="OptionField">
+			<Required>N</Required>
+			<Default>0</Default>
+			<OptionValues>
+				<Option0 value="0">Decode DNS responses and resolve only local numeric IPs</Option0>
+				<Option1 value="1">Decode DNS responses and resolve all numeric IPs</Option1>
+				<Option2 value="2">Decode DNS responses and do not resolve numeric IPs</Option2>
+				<Option3 value="3">Do not decode DNS responses and do not resolve numeric IPs</Option3>
+			</OptionValues>
+		</dns_mode>
+		<certificate type="CertificateField">
+			<Type>cert</Type>
+			<Required>N</Required>
+			<Constraints>
+				<check001>
+					<reference>https_port.check001</reference>
+				</check001>
+			</Constraints>
+		</certificate>
+		<max_flows type="IntegerField">
+			<Required>N</Required>
+			<Default>200000</Default>
+			<MinimumValue>10000</MinimumValue>
+			<MaximumValue>10000000</MaximumValue>
+		</max_flows>
+		<max_hosts type="IntegerField">
+			<Required>N</Required>
+			<Default>100000</Default>
+			<MinimumValue>1000</MinimumValue>
+			<MaximumValue>5000000</MaximumValue>
+		</max_hosts>
+		<local_networks type="TextField">
+			<Required>N</Required>
+		</local_networks>
+		<extra_options type="TextField">
+			<Required>N</Required>
+		</extra_options>
+	</items>
+</model>
