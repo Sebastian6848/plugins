@@ -5,6 +5,23 @@ All rights reserved.
 
 #}
 
+<style>
+/* 修复操作列下拉菜单被表格裁切的问题 */
+.bootgrid-table {
+	overflow: visible !important;
+}
+.bootgrid-table td {
+	overflow: visible !important;
+}
+.table-responsive {
+	overflow: visible !important;
+}
+/* 确保下拉菜单始终在最顶层 */
+.dropdown-menu {
+	z-index: 9999 !important;
+}
+</style>
+
 <script>
 	$(document).ready(function () {
 		'use strict';
@@ -169,17 +186,17 @@ All rights reserved.
 					commands: function (column, row) {
 						const flowKey = bootstrapSafe(row.flow_key || '');
 						let buttons = '';
-						buttons += '<div class="btn-group">';
-						buttons += '<button class="btn btn-xs btn-default dropdown-toggle" data-toggle="dropdown" type="button">';
-						buttons += '<span class="fa fa-list"></span> <span class="caret"></span>';
+						buttons += '<div class="dropdown">';
+						buttons += '<button class="btn btn-default btn-xs dropdown-toggle" type="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">';
+						buttons += '<span class="fa fa-navicon"></span> <span class="caret"></span>';
 						buttons += '</button>';
-						buttons += '<ul class="dropdown-menu pull-right" role="menu">';
+						buttons += '<ul class="dropdown-menu dropdown-menu-right pull-right" role="menu">';
 						if (flowKey !== '') {
-							buttons += '<li><a href="#" data-action="detail" data-flow-key="' + flowKey + '"><span class="fa fa-search"></span> {{ lang._("查看详情") }}</a></li>';
+							buttons += '<li><a href="#" class="flow-info-btn" data-action="detail" data-flow-key="' + flowKey + '"><span class="fa fa-info-circle"></span> {{ lang._("信息") }}</a></li>';
+							buttons += '<li><a href="#" class="flow-chart-btn" data-action="chart" data-flow-key="' + flowKey + '"><span class="fa fa-bar-chart"></span> {{ lang._("图表") }}</a></li>';
 						} else {
 							buttons += '<li><a href="#" data-action="expired"><span class="fa fa-clock-o"></span> {{ lang._("流已过期") }}</a></li>';
 						}
-						buttons += '<li><a href="#" data-action="block" data-flow-key="' + flowKey + '"><span class="fa fa-ban"></span> {{ lang._("阻止流量") }}</a></li>';
 						buttons += '</ul>';
 						buttons += '</div>';
 						return buttons;
@@ -190,33 +207,28 @@ All rights reserved.
 				}
 			}
 		}).on('loaded.rs.jquery.bootgrid', function () {
+			$(this).closest('.table-responsive').css('overflow', 'visible');
+			$(this).closest('.bootgrid-table').css('overflow', 'visible');
+
 			gridFlows.find('a[data-action=detail]').off('click').on('click', function (event) {
 				event.preventDefault();
 				showFlowDetail($(this).data('flow-key'));
 			});
 
-			gridFlows.find('a[data-action=block]').off('click').on('click', function (event) {
+			gridFlows.find('a[data-action=chart]').off('click').on('click', function (event) {
 				event.preventDefault();
 				const flowKey = $(this).data('flow-key');
-				stdDialogConfirm(
-					"{{ lang._('Confirmation Required') }}",
-					"{{ lang._('将此流标记为阻止目标。当前版本仅提供前端占位动作。') }}",
-					"{{ lang._('Confirm') }}",
-					"{{ lang._('Cancel') }}",
-					function () {
-						BootstrapDialog.show({
-							type: BootstrapDialog.TYPE_WARNING,
-							title: "{{ lang._('Not Implemented') }}",
-							message: "{{ lang._('阻止流量的后端动作将在后续指令实现。') }}<br/>" + bootstrapSafe(flowKey),
-							buttons: [{
-								label: "{{ lang._('Close') }}",
-								action: function (dialog) {
-									dialog.close();
-								}
-							}]
-						});
-					}
-				);
+				BootstrapDialog.show({
+					type: BootstrapDialog.TYPE_INFO,
+					title: "{{ lang._('图表') }}",
+					message: "{{ lang._('此流的图表视图将在后续版本提供。') }}<br/>" + bootstrapSafe(flowKey),
+					buttons: [{
+						label: "{{ lang._('Close') }}",
+						action: function (dialog) {
+							dialog.close();
+						}
+					}]
+				});
 			});
 
 			gridFlows.find('a[data-action=expired]').off('click').on('click', function (event) {
