@@ -155,14 +155,6 @@ All rights reserved.
 
 		let autoRefreshTimer = null;
 		let customApplicationRules = [];
-		let flowGridLoading = false;
-		let flowGridReloadQueued = false;
-		let flowGridLastBodyHtml = '';
-		let flowGridLastResponse = null;
-		let flowGridEmptyRefreshCount = 0;
-		let flowGridCurrentHasFilters = false;
-		const flowRowCache = {};
-		const flowRowCacheTtlMs = 60000;
 
 		function showApiError(title, message, retryFn) {
 			const buttons = [{
@@ -211,78 +203,9 @@ All rights reserved.
 
 			if (enabled) {
 				autoRefreshTimer = setInterval(function () {
-					reloadFlows();
+					$('#grid-flows').bootgrid('reload');
 				}, 5000);
 			}
-		}
-
-		function preserveFlowRowsDuringLoad() {
-			const tbody = $('#grid-flows tbody');
-			if (!flowGridLoading || flowGridLastBodyHtml === '') {
-				return;
-			}
-
-			window.setTimeout(function () {
-				const currentHtml = $.trim(tbody.html() || '');
-				const currentText = $.trim(tbody.text() || '').toLowerCase();
-				const looksTransient = currentHtml === '' ||
-					currentText === '' ||
-					currentText.indexOf('loading') !== -1 ||
-					currentText.indexOf('no results') !== -1 ||
-					currentText.indexOf('无结果') !== -1;
-				if (flowGridLoading && looksTransient) {
-					tbody.html(flowGridLastBodyHtml);
-				}
-			}, 50);
-		}
-
-		function reloadFlows() {
-			if (flowGridLoading) {
-				flowGridReloadQueued = true;
-				preserveFlowRowsDuringLoad();
-				return;
-			}
-
-			flowGridLoading = true;
-			$('#grid-flows').bootgrid('reload');
-			preserveFlowRowsDuringLoad();
-		}
-
-		function pruneFlowRowCache(now) {
-			Object.keys(flowRowCache).forEach(function (key) {
-				if ((now - flowRowCache[key].seenAt) > flowRowCacheTtlMs) {
-					delete flowRowCache[key];
-				}
-			});
-		}
-
-		function mergeFlowRows(rows) {
-			const now = Date.now();
-			const orderedKeys = [];
-
-			(rows || []).forEach(function (row) {
-				const key = String(row.flow_key || '');
-				if (key === '') {
-					return;
-				}
-				flowRowCache[key] = {
-					row: $.extend(true, {}, row),
-					seenAt: now
-				};
-				orderedKeys.push(key);
-			});
-
-			pruneFlowRowCache(now);
-
-			Object.keys(flowRowCache).forEach(function (key) {
-				if (orderedKeys.indexOf(key) === -1) {
-					orderedKeys.push(key);
-				}
-			});
-
-			return orderedKeys.map(function (key) {
-				return $.extend(true, {}, flowRowCache[key].row);
-			});
 		}
 
 		function bootstrapSafe(value) {
@@ -330,7 +253,7 @@ All rights reserved.
 			ajaxCall('/api/appidentification/rule/list', {}, function (data) {
 				customApplicationRules = data && Array.isArray(data.rules) ? data.rules : [];
 				if ($('#grid-flows').data('bootgrid')) {
-					reloadFlows();
+					$('#grid-flows').bootgrid('reload');
 				}
 			});
 		}
@@ -753,30 +676,8 @@ All rights reserved.
 			}
 
 			closeAllFlowActionMenus();
-			const cached = flowRowCache[String(flowKey)] ? $.extend(true, {}, flowRowCache[String(flowKey)].row) : null;
 			ajaxCall('/api/appidentification/flows/getFlowDetail', {flow_key: flowKey}, function (data) {
 				if (!data || data.status === 'error') {
-					if (cached !== null) {
-						const cachedDetailView = renderFlowDetail({
-							status: 'ok',
-							flow_key: flowKey,
-							detail: cached.detail || cached,
-							row: cached
-						});
-						BootstrapDialog.show({
-							type: BootstrapDialog.TYPE_INFO,
-							cssClass: 'flow-detail-dialog',
-							title: cachedDetailView.title,
-							message: cachedDetailView.body,
-							buttons: [{
-								label: "{{ lang._('Close') }}",
-								action: function (dialog) {
-									dialog.close();
-								}
-							}]
-						});
-						return;
-					}
 					const backendMessage = (data && data.message) ? data.message : "{{ lang._('Unable to retrieve flow details') }}";
 					const userMessage = backendMessage.indexOf('expired') !== -1 ? "{{ lang._('流已过期') }}" : backendMessage;
 					showApiError("{{ lang._('获取流详情失败') }}", userMessage);
@@ -808,7 +709,7 @@ All rights reserved.
 					title: "{{ lang._('Refresh') }}",
 					method: function (event) {
 						event.preventDefault();
-						reloadFlows();
+						$('#grid-flows').bootgrid('reload');
 					},
 					sequence: 40
 				}
@@ -825,7 +726,6 @@ All rights reserved.
 					characters: 1
 				},
 				requestHandler: function (request) {
-					flowGridLoading = true;
 					const filters = readFilters();
 					request.host = filters.host;
 					request.l7_proto = filters.l7_proto;
@@ -840,46 +740,7 @@ All rights reserved.
 						request.searchPhrase = ((request.searchPhrase || '') + ' ' + filters.status).trim();
 					}
 
-					flowGridCurrentHasFilters = filters.host !== '' ||
-						filters.protocol !== '' ||
-						filters.l7_proto !== '' ||
-						filters.status !== '' ||
-						filters.traffic_type !== '' ||
-						filters.host_pool !== '' ||
-						filters.network !== '' ||
-						(request.searchPhrase || '') !== '';
-
 					return request;
-				},
-				responseHandler: function (data) {
-					if (data && Array.isArray(data.rows) && data.rows.length > 0) {
-						if (flowGridCurrentHasFilters) {
-							mergeFlowRows(data.rows);
-						} else {
-							data.rows = mergeFlowRows(data.rows);
-						}
-						data.total = data.rows.length;
-						flowGridLastResponse = $.extend(true, {}, data);
-						flowGridEmptyRefreshCount = 0;
-						return data;
-					}
-
-					if (data && Array.isArray(data.rows) && data.rows.length === 0 && !flowGridCurrentHasFilters) {
-						const cachedRows = mergeFlowRows([]);
-						if (cachedRows.length > 0) {
-							data.rows = cachedRows;
-							data.total = cachedRows.length;
-							flowGridLastResponse = $.extend(true, {}, data);
-							return data;
-						}
-
-						flowGridEmptyRefreshCount += 1;
-						if (flowGridLastResponse !== null && flowGridEmptyRefreshCount < 2) {
-							return $.extend(true, {}, flowGridLastResponse);
-						}
-					}
-
-					return data;
 				},
 				formatters: {
 					commands: function (column, row) {
@@ -912,8 +773,6 @@ All rights reserved.
 				}
 			}
 		}).on('loaded.rs.jquery.bootgrid', function () {
-			flowGridLoading = false;
-			flowGridLastBodyHtml = $('#grid-flows tbody').html() || flowGridLastBodyHtml;
 			$(this).closest('.table-responsive').css('overflow', 'visible');
 			$(this).closest('.bootgrid-table').css('overflow', 'visible');
 			installDetachedFlowDropdowns();
@@ -949,17 +808,6 @@ All rights reserved.
 				closeFlowActionMenu(this);
 				showApiError("{{ lang._('获取流详情失败') }}", "{{ lang._('流已过期') }}");
 			});
-
-			if (flowGridReloadQueued) {
-				flowGridReloadQueued = false;
-				window.setTimeout(reloadFlows, 100);
-			}
-		});
-
-		$(document).ajaxComplete(function (event, xhr, settings) {
-			if (settings && settings.url && settings.url.indexOf('/api/appidentification/flows/search') === 0) {
-				flowGridLoading = false;
-			}
 		});
 
 		$(window).on('scroll.flowmenu resize.flowmenu', function () {
@@ -969,7 +817,7 @@ All rights reserved.
 		});
 
 		$('#flow_apply_filters').on('click', function () {
-			reloadFlows();
+			$('#grid-flows').bootgrid('reload');
 		});
 
 		$('#flow_reset_filters').on('click', function () {
@@ -981,11 +829,11 @@ All rights reserved.
 			$('#flow_filter_host_pool').val('');
 			$('#flow_filter_network').val('');
 			$('.selectpicker').selectpicker('refresh');
-			reloadFlows();
+			$('#grid-flows').bootgrid('reload');
 		});
 
 		$('#flow_refresh').on('click', function () {
-			reloadFlows();
+			$('#grid-flows').bootgrid('reload');
 		});
 
 		$('#flow_auto_refresh').on('change', function () {
@@ -995,12 +843,12 @@ All rights reserved.
 		$('#flow_filters input').on('keypress', function (event) {
 			if (event.which === 13) {
 				event.preventDefault();
-				reloadFlows();
+				$('#grid-flows').bootgrid('reload');
 			}
 		});
 
 		$('#flow_filters select').on('change', function () {
-			reloadFlows();
+			$('#grid-flows').bootgrid('reload');
 		});
 
 		loadCustomApplicationRules();
