@@ -9,8 +9,6 @@ All rights reserved.
 	$(document).ready(function () {
 		'use strict';
 
-		let l7Chart = null;
-
 		function showApiError(title, message, retryFn) {
 			const buttons = [{
 				label: '{{ lang._('Close') }}',
@@ -84,100 +82,64 @@ All rights reserved.
 			tbody.html(rows);
 		}
 
-		function renderL7Chart(data) {
-			if (l7Chart !== null && typeof l7Chart.destroy === 'function') {
-				l7Chart.destroy();
-				l7Chart = null;
-			}
-
-			if (!data || !Array.isArray(data.labels) || data.labels.length === 0) {
-				$('#l7-chart').html('<p class="text-muted text-center">{{ lang._('暂无应用流量数据') }}</p>');
-				return;
-			}
-
-			$('#l7-chart').html('');
-
-			if (typeof ApexCharts === 'undefined') {
-				if (typeof Chart === 'undefined') {
-					$('#l7-chart').html('<p class="text-muted text-center">{{ lang._('图表组件未加载，无法显示图表') }}</p>');
-					return;
-				}
-
-				$('#l7-chart').html('<canvas id="l7-chart-canvas" style="height:300px;"></canvas>');
-				l7Chart = new Chart(document.getElementById('l7-chart-canvas').getContext('2d'), {
-					type: 'doughnut',
-					data: {
-						labels: data.labels || [],
-						datasets: [{
-							data: data.series || [],
-							backgroundColor: data.colors || undefined,
-							borderWidth: 0
-						}]
-					},
-					options: {
-						responsive: true,
-						maintainAspectRatio: false,
-						plugins: {
-							legend: {
-								position: 'bottom'
-							},
-							tooltip: {
-								callbacks: {
-									label: function (context) {
-										return context.label + ': ' + bytesToSize(context.parsed);
-									}
-								}
-							}
-						}
-					}
-				});
-				return;
-			}
-
-			const options = {
-				chart: {
-					type: 'donut',
-					height: 300
-				},
-				series: data.series || [],
-				labels: data.labels || [],
-				colors: data.colors || undefined,
-				tooltip: {
-					y: {
-						formatter: function (val) {
-							return bytesToSize(val);
-						}
-					}
-				},
-				legend: {
-					position: 'bottom'
-				},
-				dataLabels: {
-					formatter: function (val, opts) {
-						return opts.w.globals.labels[opts.seriesIndex] + ': ' + val.toFixed(1) + '%';
-					}
-				}
-			};
-
-			l7Chart = new ApexCharts(document.querySelector('#l7-chart'), options);
-			l7Chart.render();
+		function normalizeColor(color) {
+			const value = String(color || '').replace(/cc$/i, '');
+			return /^#[0-9a-f]{3,8}$/i.test(value) ? value : '#337ab7';
 		}
 
-		function loadL7Chart() {
+		function renderL7StatsTable(data) {
+			const tbody = $('#l7-stats-body');
+
+			if (!data || !Array.isArray(data.labels) || data.labels.length === 0) {
+				tbody.html('<tr><td colspan="4" class="text-center text-muted">{{ lang._('暂无应用流量数据') }}</td></tr>');
+				return;
+			}
+
+			const labels = data.labels || [];
+			const series = Array.isArray(data.series) ? data.series : [];
+			const colors = Array.isArray(data.colors) ? data.colors : [];
+			const total = series.reduce(function (sum, value) {
+				return sum + Number(value || 0);
+			}, 0);
+			const maxVal = Number(series[0] || 1);
+			let rows = '';
+
+			labels.slice(0, 10).forEach(function (label, idx) {
+				const bytes = Number(series[idx] || 0);
+				const percent = total > 0 ? (bytes / total * 100).toFixed(1) : '0.0';
+				const barW = maxVal > 0 ? (bytes / maxVal * 100).toFixed(1) : '0.0';
+				const color = normalizeColor(colors[idx]);
+
+				rows += '<tr>' +
+					'<td>' + esc(label) + '</td>' +
+					'<td>' + esc(bytesToSize(bytes)) + '</td>' +
+					'<td>' + esc(percent + '%') + '</td>' +
+					'<td style="width:200px;">' +
+					'<div style="background:' + color + ';width:' + barW + '%;height:14px;border-radius:3px;min-width:2px;"></div>' +
+					'</td>' +
+					'</tr>';
+			});
+
+			tbody.html(rows);
+		}
+
+		function loadL7Stats() {
 			ajaxCall('/api/appidentification/applications/getL7Stats', {}, function (response) {
 				if (!response || response.status === 'error') {
-					showApiError('{{ lang._('加载应用数据失败') }}', (response && response.message) ? response.message : '{{ lang._('Unable to load application data') }}', loadL7Chart);
+					$('#l7-stats-body').html('<tr><td colspan="4" class="text-center text-muted">{{ lang._('暂无应用流量数据') }}</td></tr>');
+					$('#app-list-body').html('<tr><td colspan="3" class="text-center text-muted">{{ lang._('暂无数据') }}</td></tr>');
+					showApiError('{{ lang._('加载应用数据失败') }}', (response && response.message) ? response.message : '{{ lang._('Unable to load application data') }}', loadL7Stats);
 					return;
 				}
 
 				const data = response.data || {};
 				if (!data.labels) {
-					$('#l7-chart').html('<p class="text-muted text-center">{{ lang._('暂无应用流量数据') }}</p>');
+					renderL7StatsTable(data);
 					loadAppList(data);
 					return;
 				}
 
-				renderL7Chart(data);
+				renderL7StatsTable(data);
 				loadAppList(data);
 			});
 		}
@@ -282,7 +244,7 @@ All rights reserved.
 					$saveButton.prop('disabled', false);
 					$('#DialogRule').modal('hide');
 					loadRules();
-					loadL7Chart();
+					loadL7Stats();
 				}, function () {
 					$saveButton.prop('disabled', false);
 				});
@@ -319,7 +281,7 @@ All rights reserved.
 						}
 						applyRulesAfterSave(function () {
 							loadRules();
-							loadL7Chart();
+							loadL7Stats();
 						});
 					});
 				}
@@ -327,19 +289,20 @@ All rights reserved.
 		});
 
 		$('#reload-app-data').on('click', function () {
-			loadL7Chart();
+			loadL7Stats();
 			loadRules();
 		});
 
 		$('#applyRulesAct').SimpleActionButton({
 			onAction: function () {
 				loadRules();
-				loadL7Chart();
+				loadL7Stats();
 			}
 		});
 
-		loadL7Chart();
+		loadL7Stats();
 		loadRules();
+		setInterval(loadL7Stats, 30000);
 
 		$(document).ajaxError(function (event, xhr, settings) {
 			if (settings && settings.url && settings.url.indexOf('/api/appidentification/') === 0) {
@@ -353,8 +316,22 @@ All rights reserved.
 <div class="content-box">
 	<div class="row">
 		<div class="col-md-12">
-			<h3>{{ lang._('Top 10 应用流量分布') }}</h3>
-			<div id="l7-chart" style="min-height:300px;"></div>
+			<h4>{{ lang._('Top 10 应用流量分布') }}</h4>
+			<table class="table table-striped table-condensed">
+				<thead>
+				<tr>
+					<th>{{ lang._('应用名称') }}</th>
+					<th>{{ lang._('总流量') }}</th>
+					<th>{{ lang._('占比') }}</th>
+					<th>{{ lang._('流量条') }}</th>
+				</tr>
+				</thead>
+				<tbody id="l7-stats-body">
+				<tr>
+					<td colspan="4" class="text-center text-muted">{{ lang._('加载中...') }}</td>
+				</tr>
+				</tbody>
+			</table>
 		</div>
 	</div>
 
