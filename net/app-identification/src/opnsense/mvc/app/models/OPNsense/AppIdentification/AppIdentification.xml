@@ -126,6 +126,7 @@
 						<ip value="ip">Exact IP</ip>
 						<cidr value="cidr">CIDR network</cidr>
 						<port value="port">Destination port</port>
+						<protocol value="protocol">Protocol name</protocol>
 					</OptionValues>
 				</match_type>
 				<match_value type="TextField">

@@ -13,7 +13,7 @@ use OPNsense\Base\IndexController as BaseUIController;
 /**
  * Class ApplicationsController
  *
- * Page controller for the Applications page (L7 statistics and custom rules).
+ * Page controller for the Applications page (L7 statistics).
  *
  * @access page-services-app-identification
  */
@@ -38,7 +38,6 @@ class ApplicationsController extends BaseUIController
 	/**
 	 * Render the applications page.
 	 *
-	 * Loads the dialogRule form definition for the custom rule edit dialog.
 	 * Application data and category lists are fetched asynchronously by the
 	 * frontend via the API controllers.
 	 *
@@ -51,7 +50,6 @@ class ApplicationsController extends BaseUIController
 	{
 		$categories = $this->api->categoriesAction();
 		$this->view->categories = $categories['rows'] ?? [];
-		$this->view->formDialogRule = $this->getForm('dialogRule');
 		$this->view->pick('OPNsense/AppIdentification/applications');
 	}
 }

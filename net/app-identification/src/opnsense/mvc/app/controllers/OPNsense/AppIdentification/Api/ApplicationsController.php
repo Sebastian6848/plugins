@@ -700,6 +700,7 @@ class ApplicationsController extends GeneralController
 		$serverIp = (string)($server['ip'] ?? '');
 		$clientIp = (string)($client['ip'] ?? '');
 		$serverPort = (string)($server['port'] ?? '');
+		$protocol = strtolower((string)($flow['protocol']['l7'] ?? $flow['l7_proto'] ?? ''));
 
 		foreach ($rules as $rule) {
 			$value = trim((string)($rule['match_value'] ?? ''));
@@ -724,6 +725,11 @@ class ApplicationsController extends GeneralController
 					break;
 				case 'port':
 					if ($serverPort === $value) {
+						return $rule;
+					}
+					break;
+				case 'protocol':
+					if ($protocol !== '' && strpos($protocol, strtolower($value)) !== false) {
 						return $rule;
 					}
 					break;

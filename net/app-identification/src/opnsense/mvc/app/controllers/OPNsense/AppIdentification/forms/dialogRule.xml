@@ -20,7 +20,7 @@
         <id>rule.match_type</id>
         <label>Match Type</label>
         <type>dropdown</type>
-        <help>Select which flow field should be matched. Domain checks server.name, IP and CIDR check client/server IPs, and port checks server.port.</help>
+        <help>Select which flow field should be matched. Domain checks server.name, IP and CIDR check client/server IPs, port checks server.port, and protocol checks L7 protocol text.</help>
     </field>
     <field>
         <id>rule.match_value</id>

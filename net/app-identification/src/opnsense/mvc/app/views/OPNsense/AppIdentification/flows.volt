@@ -446,6 +446,7 @@ All rights reserved.
 			const serverIp = String(row.server_ip || '');
 			const clientIp = String(row.client_ip || '');
 			const serverPort = String(row.server_port || '');
+			const protocol = String(row.protocol || row.l7_proto || row.info || '').toLowerCase();
 
 			for (let idx = 0; idx < customApplicationRules.length; idx++) {
 				const rule = customApplicationRules[idx] || {};
@@ -465,6 +466,9 @@ All rights reserved.
 					return rule;
 				}
 				if (type === 'port' && serverPort === value) {
+					return rule;
+				}
+				if (type === 'protocol' && protocol.indexOf(value.toLowerCase()) !== -1) {
 					return rule;
 				}
 			}

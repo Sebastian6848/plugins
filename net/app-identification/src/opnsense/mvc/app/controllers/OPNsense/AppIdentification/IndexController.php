@@ -47,6 +47,8 @@ class IndexController extends BaseUIController
 	{
 		$this->view->currentConfig = $this->model->getNodes();
 		$this->view->generalForm = $this->getForm('general');
+		$this->view->rulesForm = $this->getForm('rules');
+		$this->view->formDialogRule = $this->getForm('dialogRule');
 		$this->view->pick('OPNsense/AppIdentification/index');
 	}
 }

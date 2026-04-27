@@ -205,30 +205,9 @@ All rights reserved.
 			});
 		}
 
-		function loadRules() {
-			$('#grid-custom-rules').bootgrid('reload');
-		}
-
-		$('#grid-custom-rules').UIBootgrid({
-			search: '/api/appidentification/rule/searchRules',
-			get: '/api/appidentification/rule/getRule/',
-			set: '/api/appidentification/rule/setRule/',
-			add: '/api/appidentification/rule/addRule/',
-			del: '/api/appidentification/rule/delRule/',
-			toggle: '/api/appidentification/rule/toggleRule/',
-			options: {
-				selection: false,
-				multiSelect: false
-			}
-		}).on('loaded.rs.jquery.bootgrid', function () {
-			loadL7Stats();
-			loadTopHosts();
-		});
-
 		$('#reload-app-data').on('click', function () {
 			loadL7Stats();
 			loadTopHosts();
-			loadRules();
 		});
 
 		$('#top_host_app_filter').on('change', function () {
@@ -237,7 +216,6 @@ All rights reserved.
 
 		loadL7Stats();
 		loadTopHosts();
-		loadRules();
 		setInterval(function () {
 			loadL7Stats();
 			loadTopHosts();
@@ -309,38 +287,4 @@ All rights reserved.
 			</table>
 		</div>
 	</div>
-
-	<hr/>
-
-	<div class="row">
-		<div class="col-md-12">
-			<h3>{{ lang._('自定义规则') }}</h3>
-			<table id="grid-custom-rules" class="table table-condensed table-hover table-striped table-responsive" data-editDialog="DialogRule">
-				<thead>
-				<tr>
-					<th data-column-id="enabled" data-width="6em" data-type="string" data-formatter="rowtoggle">{{ lang._('启用') }}</th>
-					<th data-column-id="description" data-type="string">{{ lang._('描述') }}</th>
-					<th data-column-id="match_type" data-type="string">{{ lang._('匹配类型') }}</th>
-					<th data-column-id="match_value" data-type="string">{{ lang._('匹配值') }}</th>
-					<th data-column-id="app_label" data-type="string">{{ lang._('应用标签') }}</th>
-					<th data-column-id="uuid" data-type="string" data-identifier="true" data-visible="false">{{ lang._('ID') }}</th>
-					<th data-column-id="commands" data-width="7em" data-formatter="commands" data-sortable="false">{{ lang._('操作') }}</th>
-				</tr>
-				</thead>
-				<tbody></tbody>
-				<tfoot>
-				<tr>
-					<td></td>
-					<td>
-						<button data-action="add" type="button" class="btn btn-xs btn-default">
-							<span class="fa fa-plus"></span>
-						</button>
-					</td>
-				</tr>
-				</tfoot>
-			</table>
-		</div>
-	</div>
 </div>
-
-{{ partial("layout_partials/base_dialog",['fields':formDialogRule,'id':'DialogRule','label':lang._('Edit Custom Rule')]) }}
