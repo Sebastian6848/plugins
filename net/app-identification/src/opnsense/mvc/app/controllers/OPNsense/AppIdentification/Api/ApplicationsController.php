@@ -174,6 +174,75 @@ class ApplicationsController extends GeneralController
 	}
 
 	/**
+	 * Return Top applications aggregated from active flows and custom rules.
+	 *
+	 * When no custom rules are enabled, this endpoint falls back to ntopng's
+	 * native L7 statistics to preserve the historical/cumulative behaviour.
+	 *
+	 * @return array
+	 */
+	public function topApplicationsAction(): array
+	{
+		try {
+			$rules = $this->getEnabledRules();
+			if (empty($rules)) {
+				return $this->topApplicationsFromL7Stats();
+			}
+
+			$flowResult = $this->proxyRequest('flow/active.lua', [
+				'ifid' => $this->getIfid(),
+				'perPage' => 1000
+			]);
+			if (($flowResult['status'] ?? '') === 'error') {
+				return [
+					'status' => 'error',
+					'message' => (string)($flowResult['message'] ?? 'Unable to load active flows.')
+				];
+			}
+
+			$stats = [];
+			foreach ($this->extractFlowRows($flowResult) as $flow) {
+				if (!is_array($flow)) {
+					continue;
+				}
+
+				$matchedRule = $this->matchFlowRule($flow, $rules);
+				$name = $matchedRule !== null ? (string)$matchedRule['app_label'] : trim((string)($flow['protocol']['l7'] ?? ''));
+				if ($name === '') {
+					$name = 'Unidentified';
+				}
+
+				if (!isset($stats[$name])) {
+					$stats[$name] = [
+						'name' => $name,
+						'bytes' => 0,
+						'flows' => 0,
+						'is_custom' => $matchedRule !== null
+					];
+				}
+
+				$stats[$name]['bytes'] += (int)($flow['bytes'] ?? 0);
+				$stats[$name]['flows'] += 1;
+				$stats[$name]['is_custom'] = $stats[$name]['is_custom'] || $matchedRule !== null;
+			}
+
+			$applications = array_values($stats);
+			usort($applications, function ($left, $right) {
+				return (int)$right['bytes'] <=> (int)$left['bytes'];
+			});
+			$applications = array_slice($applications, 0, 10);
+
+			return $this->formatTopApplicationsResponse($applications, true);
+		} catch (\Throwable $e) {
+			syslog(LOG_ERR, 'AppIdentification: unable to aggregate top applications: ' . $e->getMessage());
+			return [
+				'status' => 'error',
+				'message' => 'Unable to aggregate top applications.'
+			];
+		}
+	}
+
+	/**
 	 * Return Top 10 hosts aggregated from active flows.
 	 *
 	 * @return array
@@ -181,6 +250,8 @@ class ApplicationsController extends GeneralController
 	public function getTopHostsAction(): array
 	{
 		try {
+			$appFilter = $this->requestString('app_filter', 'all');
+			$rules = $appFilter !== 'all' ? $this->getEnabledRules() : [];
 			$flowResult = $this->proxyRequest('flow/active.lua', [
 				'ifid' => $this->getIfid(),
 				'perPage' => 200
@@ -195,6 +266,20 @@ class ApplicationsController extends GeneralController
 			foreach ($flows as $flow) {
 				if (!is_array($flow)) {
 					continue;
+				}
+
+				if ($appFilter !== 'all') {
+					$matchedRule = $this->matchFlowRule($flow, $rules);
+					if ($appFilter === 'custom_only') {
+						if ($matchedRule === null) {
+							continue;
+						}
+					} elseif (strpos($appFilter, 'custom:') === 0) {
+						$label = substr($appFilter, 7);
+						if ($matchedRule === null || (string)$matchedRule['app_label'] !== $label) {
+							continue;
+						}
+					}
 				}
 
 				$bytes = (int)($flow['bytes'] ?? 0);
@@ -471,6 +556,204 @@ class ApplicationsController extends GeneralController
 			'ifid' => $this->getIfid(),
 			'ndpistats_mode' => 'sinceStartup',
 		]);
+	}
+
+	/**
+	 * Format ntopng L7 statistics as the topApplications response.
+	 *
+	 * @return array
+	 */
+	private function topApplicationsFromL7Stats(): array
+	{
+		$result = $this->fetchL7Stats();
+		if (($result['status'] ?? '') === 'error') {
+			return $result;
+		}
+		if (($result['rc'] ?? -1) !== 0) {
+			return [
+				'status' => 'error',
+				'message' => (string)($result['rc_str_hr'] ?? $result['rc_str'] ?? 'Unable to load L7 statistics.')
+			];
+		}
+
+		$labels = is_array($result['rsp']['labels'] ?? null) ? $result['rsp']['labels'] : [];
+		$series = is_array($result['rsp']['series'] ?? null) ? $result['rsp']['series'] : [];
+		$applications = [];
+		foreach ($labels as $idx => $label) {
+			$applications[] = [
+				'name' => (string)$label,
+				'bytes' => (int)($series[$idx] ?? 0),
+				'flows' => 0,
+				'is_custom' => false
+			];
+		}
+
+		usort($applications, function ($left, $right) {
+			return (int)$right['bytes'] <=> (int)$left['bytes'];
+		});
+
+		return $this->formatTopApplicationsResponse(array_slice($applications, 0, 10), false);
+	}
+
+	/**
+	 * Build response payload compatible with the existing table renderer.
+	 *
+	 * @param array $applications
+	 * @param bool $realtime
+	 * @return array
+	 */
+	private function formatTopApplicationsResponse(array $applications, bool $realtime): array
+	{
+		$labels = [];
+		$series = [];
+		$colors = [];
+		foreach ($applications as &$application) {
+			$application['bytes'] = (int)($application['bytes'] ?? 0);
+			$application['flows'] = (int)($application['flows'] ?? 0);
+			$application['is_custom'] = !empty($application['is_custom']);
+			$application['bytes_fmt'] = $this->formatBytes($application['bytes']);
+			$labels[] = (string)$application['name'];
+			$series[] = $application['bytes'];
+			$colors[] = $application['is_custom'] ? '#d9534f' : '#337ab7';
+		}
+		unset($application);
+
+		return [
+			'status' => 'ok',
+			'data' => [
+				'applications' => $applications,
+				'labels' => $labels,
+				'series' => $series,
+				'colors' => $colors,
+				'mode' => $realtime ? 'realtime' : 'l7stats'
+			]
+		];
+	}
+
+	/**
+	 * Return enabled custom rules from the persistent model.
+	 *
+	 * @return array
+	 */
+	private function getEnabledRules(): array
+	{
+		$model = $this->getModel();
+		$rules = [];
+		foreach ($model->rules->rule->iterateItems() as $uuid => $rule) {
+			if ((string)$rule->enabled !== '1') {
+				continue;
+			}
+			$rules[] = [
+				'uuid' => (string)$uuid,
+				'match_type' => (string)$rule->match_type,
+				'match_value' => trim((string)$rule->match_value),
+				'app_label' => trim((string)$rule->app_label)
+			];
+		}
+		return $rules;
+	}
+
+	/**
+	 * Extract active flow rows from ntopng response.
+	 *
+	 * @param array $payload
+	 * @return array
+	 */
+	private function extractFlowRows(array $payload): array
+	{
+		$candidates = [
+			$payload['rsp']['data'] ?? null,
+			$payload['rsp']['flows'] ?? null,
+			$payload['data'] ?? null,
+			$payload['flows'] ?? null,
+			$payload['response']['flows'] ?? null,
+			$payload['response'] ?? null
+		];
+
+		foreach ($candidates as $candidate) {
+			if (!is_array($candidate)) {
+				continue;
+			}
+			$flows = array_values(array_filter($candidate, function ($item) {
+				return is_array($item) && (isset($item['client']) || isset($item['server']) || isset($item['protocol']));
+			}));
+			if (!empty($flows)) {
+				return $flows;
+			}
+		}
+
+		return [];
+	}
+
+	/**
+	 * Match a flow against custom rules using the same priority as the frontend.
+	 *
+	 * @param array $flow
+	 * @param array $rules
+	 * @return array|null
+	 */
+	private function matchFlowRule(array $flow, array $rules): ?array
+	{
+		$client = is_array($flow['client'] ?? null) ? $flow['client'] : [];
+		$server = is_array($flow['server'] ?? null) ? $flow['server'] : [];
+		$serverName = strtolower((string)($server['name'] ?? ''));
+		$serverIp = (string)($server['ip'] ?? '');
+		$clientIp = (string)($client['ip'] ?? '');
+		$serverPort = (string)($server['port'] ?? '');
+
+		foreach ($rules as $rule) {
+			$value = trim((string)($rule['match_value'] ?? ''));
+			if ($value === '') {
+				continue;
+			}
+			switch ((string)($rule['match_type'] ?? '')) {
+				case 'domain':
+					if ($serverName !== '' && strpos($serverName, strtolower($value)) !== false) {
+						return $rule;
+					}
+					break;
+				case 'ip':
+					if ($serverIp === $value || $clientIp === $value) {
+						return $rule;
+					}
+					break;
+				case 'cidr':
+					if ($this->ipInCidr($serverIp, $value) || $this->ipInCidr($clientIp, $value)) {
+						return $rule;
+					}
+					break;
+				case 'port':
+					if ($serverPort === $value) {
+						return $rule;
+					}
+					break;
+			}
+		}
+
+		return null;
+	}
+
+	/**
+	 * Check IPv4 address membership in CIDR notation.
+	 *
+	 * @param string $ip
+	 * @param string $cidr
+	 * @return bool
+	 */
+	private function ipInCidr(string $ip, string $cidr): bool
+	{
+		$parts = explode('/', $cidr, 2);
+		if (count($parts) !== 2 || !is_numeric($parts[1])) {
+			return false;
+		}
+		$ipLong = ip2long($ip);
+		$networkLong = ip2long($parts[0]);
+		$prefix = (int)$parts[1];
+		if ($ipLong === false || $networkLong === false || $prefix < 0 || $prefix > 32) {
+			return false;
+		}
+		$mask = $prefix === 0 ? 0 : (-1 << (32 - $prefix));
+		return (($ipLong & $mask) === ($networkLong & $mask));
 	}
 
 	/**

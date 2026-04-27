@@ -60,31 +60,48 @@ All rights reserved.
 		}
 
 		function renderL7StatsTable(data) {
-			const tbody = $('#l7-stats-body');
+				const tbody = $('#l7-stats-body');
+				const noApplicationDataText = "{{ lang._('暂无应用流量数据') }}";
+				const customRuleText = "{{ lang._('自定义规则') }}";
+				let applications = Array.isArray(data && data.applications) ? data.applications : [];
 
-			if (!data || !Array.isArray(data.labels) || data.labels.length === 0) {
-				tbody.html('<tr><td colspan="4" class="text-center text-muted">{{ lang._('暂无应用流量数据') }}</td></tr>');
-				return;
-			}
+			if (applications.length === 0 && data && Array.isArray(data.labels)) {
+				const labels = data.labels || [];
+				const series = Array.isArray(data.series) ? data.series : [];
+				applications = labels.map(function (label, idx) {
+					return {
+						name: label,
+						bytes: Number(series[idx] || 0),
+						is_custom: false
+					};
+				});
+				}
 
-			const labels = data.labels || [];
-			const series = Array.isArray(data.series) ? data.series : [];
-			const colors = Array.isArray(data.colors) ? data.colors : [];
-			const total = series.reduce(function (sum, value) {
-				return sum + Number(value || 0);
+				if (applications.length === 0) {
+					tbody.html('<tr><td colspan="4" class="text-center text-muted">' + esc(noApplicationDataText) + '</td></tr>');
+					return;
+				}
+
+			const total = applications.reduce(function (sum, item) {
+				return sum + Number(item.bytes || 0);
 			}, 0);
-			const maxVal = Number(series[0] || 1);
+			const maxVal = Math.max.apply(null, applications.map(function (item) {
+				return Number(item.bytes || 0);
+			})) || 1;
 			let rows = '';
 
-			labels.slice(0, 10).forEach(function (label, idx) {
-				const bytes = Number(series[idx] || 0);
+			applications.slice(0, 10).forEach(function (item) {
+				const bytes = Number(item.bytes || 0);
 				const percent = total > 0 ? (bytes / total * 100).toFixed(1) : '0.0';
 				const barW = maxVal > 0 ? (bytes / maxVal * 100).toFixed(1) : '0.0';
-				const color = normalizeColor(colors[idx]);
+				const color = item.is_custom ? '#d9534f' : '#337ab7';
+				const appName = item.is_custom ?
+					'<span class="label label-danger" title="' + esc(customRuleText) + '">' + esc(item.name || '') + '</span>' :
+					esc(item.name || '');
 
 				rows += '<tr>' +
-					'<td>' + esc(label) + '</td>' +
-					'<td>' + esc(bytesToSize(bytes)) + '</td>' +
+					'<td>' + appName + '</td>' +
+					'<td>' + esc(item.bytes_fmt || bytesToSize(bytes)) + '</td>' +
 					'<td>' + esc(percent + '%') + '</td>' +
 					'<td style="width:200px;">' +
 					'<div style="background:' + color + ';width:' + barW + '%;height:14px;border-radius:3px;min-width:2px;"></div>' +
@@ -93,23 +110,51 @@ All rights reserved.
 			});
 
 			tbody.html(rows);
+			updateHostAppFilter(applications);
+		}
+
+		function updateHostAppFilter(applications) {
+			const select = $('#top_host_app_filter');
+			const current = select.val() || 'all';
+			const customApps = {};
+			applications.forEach(function (item) {
+				if (item.is_custom && item.name) {
+					customApps[item.name] = true;
+				}
+			});
+
+			select.find('option[data-custom-app="1"]').remove();
+			Object.keys(customApps).sort().forEach(function (name) {
+				select.append('<option data-custom-app="1" value="custom:' + esc(name) + '">' + esc(name) + '</option>');
+			});
+			const hasCurrent = select.find('option').filter(function () {
+				return $(this).val() === current;
+			}).length > 0;
+			select.val(hasCurrent ? current : 'all');
+			$('.selectpicker').selectpicker('refresh');
 		}
 
 		function loadL7Stats() {
-			ajaxCall('/api/appidentification/applications/getL7Stats', {}, function (response) {
+			const updatingText = "{{ lang._('更新中...') }}";
+			const refreshFailedText = "{{ lang._('刷新失败') }}";
+			const updatedText = "{{ lang._('已更新') }}";
+			$('#app-stats-refresh-status').show().removeClass('text-danger text-success').addClass('text-muted')
+				.html('<span class="fa fa-refresh fa-spin"></span> ' + esc(updatingText));
+			ajaxCall('/api/appidentification/applications/topApplications', {}, function (response) {
 				if (!response || response.status === 'error') {
-					$('#l7-stats-body').html('<tr><td colspan="4" class="text-center text-muted">{{ lang._('暂无应用流量数据') }}</td></tr>');
+					$('#app-stats-refresh-status').removeClass('text-muted text-success').addClass('text-danger')
+						.html('<span class="fa fa-exclamation-triangle"></span> ' + esc(refreshFailedText));
 					showApiError('{{ lang._('加载应用数据失败') }}', (response && response.message) ? response.message : '{{ lang._('Unable to load application data') }}', loadL7Stats);
 					return;
 				}
 
 				const data = response.data || {};
-				if (!data.labels) {
-					renderL7StatsTable(data);
-					return;
-				}
-
 				renderL7StatsTable(data);
+				$('#app-stats-refresh-status').removeClass('text-muted text-danger').addClass('text-success')
+					.html('<span class="fa fa-check"></span> ' + esc(updatedText));
+				window.setTimeout(function () {
+					$('#app-stats-refresh-status').fadeOut(300);
+				}, 1200);
 			});
 		}
 
@@ -126,7 +171,9 @@ All rights reserved.
 		}
 
 		function loadTopHosts() {
-			ajaxCall('/api/appidentification/applications/getTopHosts', {}, function (response) {
+			ajaxCall('/api/appidentification/applications/getTopHosts', {
+				app_filter: $('#top_host_app_filter').val() || 'all'
+			}, function (response) {
 				if (!response || response.status !== 'ok' || !Array.isArray(response.data) || response.data.length === 0) {
 					$('#top-hosts-body').html('<tr><td colspan="5" class="text-center text-muted">{{ lang._('暂无主机数据') }}</td></tr>');
 					return;
@@ -175,6 +222,10 @@ All rights reserved.
 			loadRules();
 		});
 
+		$('#top_host_app_filter').on('change', function () {
+			loadTopHosts();
+		});
+
 		loadL7Stats();
 		loadTopHosts();
 		loadRules();
@@ -195,6 +246,9 @@ All rights reserved.
 <div class="content-box">
 	<div class="row">
 		<div class="col-md-12">
+			<div class="pull-right" style="margin-bottom: 8px;">
+				<small id="app-stats-refresh-status" class="text-muted" style="display:none;"></small>
+			</div>
 			<h4>{{ lang._('Top 10 应用流量分布') }}</h4>
 			<table class="table table-striped table-condensed">
 				<thead>
@@ -219,6 +273,10 @@ All rights reserved.
 	<div class="row">
 		<div class="col-md-12">
 			<div class="pull-right" style="margin-bottom: 8px;">
+				<select id="top_host_app_filter" class="selectpicker" data-width="180px">
+					<option value="all">{{ lang._('所有应用') }}</option>
+					<option value="custom_only">{{ lang._('仅自定义应用') }}</option>
+				</select>
 				<button id="reload-app-data" type="button" class="btn btn-default btn-xs">
 					<span class="fa fa-refresh"></span> {{ lang._('Refresh') }}
 				</button>
