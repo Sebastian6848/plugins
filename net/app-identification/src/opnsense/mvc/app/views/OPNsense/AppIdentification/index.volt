@@ -215,17 +215,15 @@ $(document).ready(function() {
 	}
 
 	function getNtopngBaseUrl() {
-		const host = $.trim($('#general\\.rest_host').val() || '');
+		const host = $.trim(window.location.hostname || '');
 		if (host === '') {
 			return '';
 		}
-		const scheme = $.trim($('#general\\.rest_scheme').val() || 'http') || 'http';
-		const port = $.trim($('#general\\.http_port').val() || $('#general\\.rest_port').val() || '');
-		const hasScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(host);
-		let url = hasScheme ? host : scheme + '://' + host;
+		const port = $.trim($('#general\\.http_port').val() || $('#general\\.rest_port').val() || '3000');
+		let url = 'http://' + host;
 
-		if (port !== '' && !/:\d+$/.test(url.replace(/\/+$/, ''))) {
-			url = url.replace(/\/+$/, '') + ':' + port;
+		if (port !== '') {
+			url += ':' + port;
 		}
 
 		return url;
