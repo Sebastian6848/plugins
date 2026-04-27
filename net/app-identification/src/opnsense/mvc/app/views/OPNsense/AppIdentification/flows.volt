@@ -147,6 +147,20 @@ All rights reserved.
 	padding: 0;
 	font-size: 12px;
 }
+#grid-flows .bootgrid-overlay {
+	top: 8px !important;
+	right: 8px !important;
+	left: auto !important;
+	bottom: auto !important;
+	width: auto !important;
+	height: auto !important;
+	min-width: 0 !important;
+	padding: 4px 8px !important;
+	background: rgba(255, 255, 255, 0.88) !important;
+	border: 1px solid #ddd !important;
+	border-radius: 3px !important;
+	pointer-events: none !important;
+}
 </style>
 
 <script>
@@ -155,6 +169,11 @@ All rights reserved.
 
 		let autoRefreshTimer = null;
 		let customApplicationRules = [];
+		let flowRefreshMode = 'manual';
+		let lastGoodFlowResponse = null;
+		let currentFlowSnapshot = {};
+		let searchResumeTimer = null;
+		let autoRefreshPausedByInteraction = false;
 
 		function showApiError(title, message, retryFn) {
 			const buttons = [{
@@ -203,9 +222,135 @@ All rights reserved.
 
 			if (enabled) {
 				autoRefreshTimer = setInterval(function () {
-					$('#grid-flows').bootgrid('reload');
+					if (autoRefreshPausedByInteraction || getFlowGridPage() > 1) {
+						updateFlowRefreshStatus();
+						return;
+					}
+					refreshFlows('auto');
 				}, 5000);
 			}
+			updateFlowRefreshStatus();
+		}
+
+		function getFlowGridInstance() {
+			return $('#grid-flows').data('UIBootgrid');
+		}
+
+		function getFlowGridPage() {
+			const instance = getFlowGridInstance();
+			if (instance && instance.table && typeof instance.table.getPage === 'function') {
+				return Number(instance.table.getPage() || 1);
+			}
+			return 1;
+		}
+
+		function refreshFlows(mode) {
+			const instance = getFlowGridInstance();
+			flowRefreshMode = mode || 'manual';
+			showFlowRefreshStatus('loading', "{{ lang._('更新中...') }}");
+			if (instance && typeof instance._reload === 'function') {
+				instance._reload(true);
+			} else {
+				$('#grid-flows').bootgrid('reload');
+			}
+		}
+
+		function showFlowRefreshStatus(state, message) {
+			const status = $('#flow_refresh_status');
+			status.removeClass('text-muted text-danger text-success');
+			status.find('.fa').removeClass('fa-refresh fa-spin fa-exclamation-triangle fa-check');
+
+			if (state === 'loading') {
+				status.addClass('text-muted');
+				status.find('.fa').addClass('fa-refresh fa-spin');
+			} else if (state === 'error') {
+				status.addClass('text-danger');
+				status.find('.fa').addClass('fa-exclamation-triangle');
+			} else {
+				status.addClass('text-success');
+				status.find('.fa').addClass('fa-check');
+			}
+
+			status.find('.flow-refresh-text').text(message || '');
+			status.show();
+			if (state === 'ok') {
+				window.setTimeout(function () {
+					status.fadeOut(300);
+				}, 1200);
+			}
+		}
+
+		function updateFlowRefreshStatus() {
+			const autoEnabled = $('#flow_auto_refresh').is(':checked');
+			const page = getFlowGridPage();
+			let text = autoEnabled ? "{{ lang._('自动刷新：5秒') }}" : "{{ lang._('自动刷新：暂停') }}";
+			if (autoEnabled && page > 1) {
+				text = "{{ lang._('非首页暂停自动刷新') }}";
+			}
+			if (autoEnabled && autoRefreshPausedByInteraction) {
+				text = "{{ lang._('操作中，暂停自动刷新') }}";
+			}
+			$('#flow_refresh_hint').text(text);
+		}
+
+		function pauseAutoRefreshForInteraction(delay) {
+			autoRefreshPausedByInteraction = true;
+			updateFlowRefreshStatus();
+			if (searchResumeTimer !== null) {
+				clearTimeout(searchResumeTimer);
+			}
+			searchResumeTimer = window.setTimeout(function () {
+				autoRefreshPausedByInteraction = false;
+				updateFlowRefreshStatus();
+			}, delay || 3000);
+		}
+
+		function buildSnapshotDetail(row) {
+			return {
+				key: row.flow_key || '',
+				hash_id: row.hash_id || '',
+				duration: row.duration || 0,
+				bytes: row.bytes_raw || 0,
+				breakdown: row.breakdown || {},
+				protocol: {
+					l4: row.l4_proto || '',
+					l7: row.l7_proto || row.info || ''
+				},
+				client: {
+					ip: row.client_ip || '',
+					name: row.client_name || row.client || '',
+					port: row.client_port || ''
+				},
+				server: {
+					ip: row.server_ip || '',
+					name: row.server_name || row.server || '',
+					port: row.server_port || ''
+				}
+			};
+		}
+
+		function showFlowDetailDialog(payload, warning) {
+			const detailView = renderFlowDetail(payload);
+			const body = warning ?
+				'<div class="alert alert-warning" style="margin: 10px;">' + bootstrapSafe(warning) + '</div>' + detailView.body :
+				detailView.body;
+
+			BootstrapDialog.show({
+				type: BootstrapDialog.TYPE_INFO,
+				cssClass: 'flow-detail-dialog',
+				title: detailView.title,
+				message: body,
+				buttons: [{
+					label: "{{ lang._('Close') }}",
+					action: function (dialog) {
+						dialog.close();
+					}
+				}],
+				onhide: function () {
+					autoRefreshPausedByInteraction = false;
+					updateFlowRefreshStatus();
+				}
+			});
 		}
 
 		function bootstrapSafe(value) {
@@ -252,8 +397,8 @@ All rights reserved.
 		function loadCustomApplicationRules() {
 			ajaxCall('/api/appidentification/rule/list', {}, function (data) {
 				customApplicationRules = data && Array.isArray(data.rules) ? data.rules : [];
-				if ($('#grid-flows').data('bootgrid')) {
-					$('#grid-flows').bootgrid('reload');
+				if ($('#grid-flows').data('UIBootgrid')) {
+					refreshFlows('manual');
 				}
 			});
 		}
@@ -360,13 +505,14 @@ All rights reserved.
 			let labelClass = 'label-warning';
 			if (rule) {
 				labelClass = 'label-danger';
-			} else if (label === 'TLS' || label === 'DNS') {
-				labelClass = 'label-default';
+				} else if (label === 'TLS' || label === 'DNS') {
+					labelClass = 'label-default';
+				}
+				const titlePrefix = "{{ lang._('底层协议') }}";
+				return '<span class="label ' + labelClass + '" title="' + bootstrapSafe(titlePrefix + ': ' + (original || '-')) + '">' +
+					bootstrapSafe(label) +
+					'</span>';
 			}
-			return '<span class="label ' + labelClass + '" title="{{ lang._('底层协议') }}: ' + bootstrapSafe(original || '-') + '">' +
-				bootstrapSafe(label) +
-				'</span>';
-		}
 
 		function endpointLabel(endpoint) {
 			if (!endpoint || typeof endpoint !== 'object') {
@@ -678,25 +824,23 @@ All rights reserved.
 			closeAllFlowActionMenus();
 			ajaxCall('/api/appidentification/flows/getFlowDetail', {flow_key: flowKey}, function (data) {
 				if (!data || data.status === 'error') {
+					const cached = currentFlowSnapshot[String(flowKey)] || null;
+					if (cached !== null) {
+						showFlowDetailDialog({
+							status: 'ok',
+							flow_key: flowKey,
+							detail: buildSnapshotDetail(cached),
+							row: cached
+						}, "{{ lang._('此流量已结束，仅显示快照数据') }}");
+						return;
+					}
 					const backendMessage = (data && data.message) ? data.message : "{{ lang._('Unable to retrieve flow details') }}";
 					const userMessage = backendMessage.indexOf('expired') !== -1 ? "{{ lang._('流已过期') }}" : backendMessage;
 					showApiError("{{ lang._('获取流详情失败') }}", userMessage);
 					return;
 				}
 
-				const detailView = renderFlowDetail(data);
-				BootstrapDialog.show({
-					type: BootstrapDialog.TYPE_INFO,
-					cssClass: 'flow-detail-dialog',
-					title: detailView.title,
-					message: detailView.body,
-					buttons: [{
-						label: "{{ lang._('Close') }}",
-						action: function (dialog) {
-							dialog.close();
-						}
-					}]
-				});
+				showFlowDetailDialog(data);
 			});
 		}
 
@@ -709,7 +853,7 @@ All rights reserved.
 					title: "{{ lang._('Refresh') }}",
 					method: function (event) {
 						event.preventDefault();
-						$('#grid-flows').bootgrid('reload');
+						refreshFlows('manual');
 					},
 					sequence: 40
 				}
@@ -741,6 +885,37 @@ All rights reserved.
 					}
 
 					return request;
+				},
+				responseHandler: function (data) {
+					if (data && data.status === 'error') {
+						showFlowRefreshStatus('error', data.message || "{{ lang._('刷新失败') }}");
+						if (lastGoodFlowResponse !== null) {
+							return $.extend(true, {}, lastGoodFlowResponse);
+						}
+						return data;
+					}
+
+					if (data && Array.isArray(data.rows)) {
+						if (data.rows.length > 0) {
+							currentFlowSnapshot = {};
+							data.rows.forEach(function (row) {
+								if (row.flow_key) {
+									currentFlowSnapshot[String(row.flow_key)] = $.extend(true, {}, row);
+								}
+							});
+							lastGoodFlowResponse = $.extend(true, {}, data);
+							showFlowRefreshStatus('ok', "{{ lang._('已更新') }}");
+							return data;
+						}
+
+						if (flowRefreshMode === 'auto' && lastGoodFlowResponse !== null) {
+							showFlowRefreshStatus('error', "{{ lang._('本次刷新为空，保留当前数据') }}");
+							return $.extend(true, {}, lastGoodFlowResponse);
+						}
+					}
+
+					showFlowRefreshStatus('ok', "{{ lang._('已更新') }}");
+					return data;
 				},
 				formatters: {
 					commands: function (column, row) {
@@ -776,9 +951,11 @@ All rights reserved.
 			$(this).closest('.table-responsive').css('overflow', 'visible');
 			$(this).closest('.bootgrid-table').css('overflow', 'visible');
 			installDetachedFlowDropdowns();
+			updateFlowRefreshStatus();
 
 			gridFlows.find('a[data-action=detail]').off('click').on('click', function (event) {
 				event.preventDefault();
+				pauseAutoRefreshForInteraction(30000);
 				closeFlowActionMenu(this);
 				showFlowDetail($(this).data('flow-key'));
 			});
@@ -810,6 +987,10 @@ All rights reserved.
 			});
 		});
 
+		gridFlows.on('load.rs.jquery.bootgrid', function () {
+			showFlowRefreshStatus('loading', "{{ lang._('更新中...') }}");
+		});
+
 		$(window).on('scroll.flowmenu resize.flowmenu', function () {
 			gridFlows.find('.dropdown.open').each(function () {
 				positionDetachedFlowMenu($(this));
@@ -817,7 +998,7 @@ All rights reserved.
 		});
 
 		$('#flow_apply_filters').on('click', function () {
-			$('#grid-flows').bootgrid('reload');
+			refreshFlows('manual');
 		});
 
 		$('#flow_reset_filters').on('click', function () {
@@ -829,11 +1010,11 @@ All rights reserved.
 			$('#flow_filter_host_pool').val('');
 			$('#flow_filter_network').val('');
 			$('.selectpicker').selectpicker('refresh');
-			$('#grid-flows').bootgrid('reload');
+			refreshFlows('manual');
 		});
 
 		$('#flow_refresh').on('click', function () {
-			$('#grid-flows').bootgrid('reload');
+			refreshFlows('manual');
 		});
 
 		$('#flow_auto_refresh').on('change', function () {
@@ -843,12 +1024,16 @@ All rights reserved.
 		$('#flow_filters input').on('keypress', function (event) {
 			if (event.which === 13) {
 				event.preventDefault();
-				$('#grid-flows').bootgrid('reload');
+				refreshFlows('manual');
 			}
 		});
 
 		$('#flow_filters select').on('change', function () {
-			$('#grid-flows').bootgrid('reload');
+			refreshFlows('manual');
+		});
+
+		$('#flow_filters input, #grid-flows-search-field').on('input keydown', function () {
+			pauseAutoRefreshForInteraction(3000);
 		});
 
 		loadCustomApplicationRules();
@@ -927,6 +1112,15 @@ All rights reserved.
 					<label class="btn btn-default" style="font-weight: normal; margin-bottom: 0;">
 						<input type="checkbox" id="flow_auto_refresh" checked="checked"/> {{ lang._('Auto refresh') }}
 					</label>
+				</div>
+				<div class="form-group" style="margin-left: 8px; margin-bottom: 6px;">
+					<small id="flow_refresh_hint" class="text-muted">{{ lang._('自动刷新：5秒') }}</small>
+				</div>
+				<div class="form-group" style="margin-left: 8px; margin-bottom: 6px;">
+					<small id="flow_refresh_status" class="text-muted" style="display:none;">
+						<span class="fa"></span>
+						<span class="flow-refresh-text"></span>
+					</small>
 				</div>
 			</div>
 		</div>

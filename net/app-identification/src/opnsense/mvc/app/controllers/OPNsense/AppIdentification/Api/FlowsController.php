@@ -76,6 +76,10 @@ class FlowsController extends GeneralController
 			$records = $this->applySort($records, $sort);
 			$total = count($records);
 
+			if ($total > 0 && ($current - 1) * $rowCount >= $total) {
+				$current = (int)ceil($total / $rowCount);
+			}
+
 			$offset = ($current - 1) * $rowCount;
 			$rows = array_slice($records, $offset, $rowCount);
 

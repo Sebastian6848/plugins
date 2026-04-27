@@ -189,7 +189,7 @@ class GeneralController extends ApiControllerBase
 			curl_setopt_array($ch, [
 				CURLOPT_RETURNTRANSFER => true,
 				CURLOPT_CONNECTTIMEOUT => 5,
-				CURLOPT_TIMEOUT => 10,
+				CURLOPT_TIMEOUT => 5,
 				CURLOPT_FAILONERROR => false,
 				CURLOPT_FOLLOWLOCATION => false,
 				CURLOPT_HTTPHEADER => $headers,
@@ -324,7 +324,7 @@ class GeneralController extends ApiControllerBase
 				CURLOPT_RETURNTRANSFER => true,
 				CURLOPT_HEADER => true,
 				CURLOPT_FOLLOWLOCATION => false,
-				CURLOPT_TIMEOUT => 10,
+				CURLOPT_TIMEOUT => 5,
 			]);
 			$response = curl_exec($ch);
 			curl_close($ch);
