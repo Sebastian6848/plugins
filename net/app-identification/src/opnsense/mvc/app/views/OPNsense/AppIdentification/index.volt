@@ -26,9 +26,6 @@ All rights reserved.
 		<div class="content-box" style="padding-bottom: 1.5em;">
 			<div class="row" style="margin-bottom: 10px;">
 				<div class="col-md-6">
-					<button id="grid-rules-add" type="button" class="btn btn-success btn-sm">
-						<span class="fa fa-plus"></span> {{ lang._('新增规则') }}
-					</button>
 					<button id="rules-import-open" type="button" class="btn btn-primary btn-sm">
 						<span class="fa fa-upload"></span> {{ lang._('批量导入') }}
 					</button>
@@ -39,15 +36,6 @@ All rights reserved.
 						<ul class="dropdown-menu">
 							<li><a href="/api/appidentification/rule/template/csv">{{ lang._('CSV 模板') }}</a></li>
 							<li><a href="/api/appidentification/rule/template/json">{{ lang._('JSON 模板') }}</a></li>
-						</ul>
-					</div>
-					<div class="btn-group">
-						<button type="button" class="btn btn-default btn-sm dropdown-toggle" data-toggle="dropdown">
-							<span class="fa fa-share-square-o"></span> {{ lang._('导出规则') }} <span class="caret"></span>
-						</button>
-						<ul class="dropdown-menu">
-							<li><a href="/api/appidentification/rule/export/csv">{{ lang._('导出为 CSV') }}</a></li>
-							<li><a href="/api/appidentification/rule/export/json">{{ lang._('导出为 JSON') }}</a></li>
 						</ul>
 					</div>
 				</div>
@@ -219,6 +207,38 @@ $(document).ready(function() {
 		refreshRuleStats();
 	}
 
+	function bindRulesHeaderExportButton() {
+		const exportBtn = $('#grid-custom-rules-reset');
+		if (!exportBtn.length || exportBtn.data('export-bound') === true) {
+			return;
+		}
+
+		exportBtn.data('export-bound', true);
+		exportBtn.attr('title', '{{ lang._('导出规则') }}');
+		exportBtn.find('span.icon').removeClass('fa-share-square').addClass('fa-download');
+		exportBtn.tooltip('destroy').tooltip({container: 'body', trigger: 'hover'});
+
+		exportBtn.off('click').on('click', function (event) {
+			event.preventDefault();
+			event.stopPropagation();
+			BootstrapDialog.show({
+				title: '{{ lang._('导出规则') }}',
+				message: '{{ lang._('请选择导出格式') }}',
+				buttons: [
+					{label: 'CSV', cssClass: 'btn-primary', action: function (dialog) {
+						dialog.close();
+						window.location.href = '/api/appidentification/rule/export/csv';
+					}},
+					{label: 'JSON', cssClass: 'btn-default', action: function (dialog) {
+						dialog.close();
+						window.location.href = '/api/appidentification/rule/export/json';
+					}},
+					{label: '{{ lang._('Cancel') }}', action: function (dialog) { dialog.close(); }}
+				]
+			});
+		});
+	}
+
 	const savedRuleRowCount = Number(window.localStorage.getItem('appidentification.rules.rowCount') || 25);
 	const ruleRowCounts = [savedRuleRowCount, 10, 25, 50, 100].filter(function (value, index, list) {
 		return value > 0 && list.indexOf(value) === index;
@@ -241,11 +261,8 @@ $(document).ready(function() {
 		if (count) {
 			window.localStorage.setItem('appidentification.rules.rowCount', count);
 		}
+		bindRulesHeaderExportButton();
 		refreshRuleStats();
-	});
-
-	$('#grid-rules-add').on('click', function () {
-		$('#grid-custom-rules button[data-action="add"]').first().click();
 	});
 
 	function parseImportPreview(format, text) {
