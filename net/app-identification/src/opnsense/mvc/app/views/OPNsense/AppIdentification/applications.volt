@@ -59,11 +59,22 @@ All rights reserved.
 			return /^#[0-9a-f]{3,8}$/i.test(value) ? value : '#337ab7';
 		}
 
+		function displayApplicationName(name) {
+			const value = String(name || '').trim();
+			const parts = value.split('.');
+			if (parts.length > 1) {
+				const suffix = parts.slice(1).join('.').trim();
+				if (suffix !== '') {
+					return suffix;
+				}
+			}
+			return value;
+		}
+
 		function renderL7StatsTable(data) {
-				const tbody = $('#l7-stats-body');
-				const noApplicationDataText = "{{ lang._('暂无应用流量数据') }}";
-				const customRuleText = "{{ lang._('自定义规则') }}";
-				let applications = Array.isArray(data && data.applications) ? data.applications : [];
+			const tbody = $('#l7-stats-body');
+			const noApplicationDataText = "{{ lang._('暂无应用流量数据') }}";
+			let applications = Array.isArray(data && data.applications) ? data.applications : [];
 
 			if (applications.length === 0 && data && Array.isArray(data.labels)) {
 				const labels = data.labels || [];
@@ -95,12 +106,10 @@ All rights reserved.
 				const percent = total > 0 ? (bytes / total * 100).toFixed(1) : '0.0';
 				const barW = maxVal > 0 ? (bytes / maxVal * 100).toFixed(1) : '0.0';
 				const color = item.is_custom ? '#d9534f' : '#337ab7';
-				const appName = item.is_custom ?
-					'<span class="label label-danger" title="' + esc(customRuleText) + '">' + esc(item.name || '') + '</span>' :
-					esc(item.name || '');
+				const appName = displayApplicationName(item.name);
 
 				rows += '<tr>' +
-					'<td>' + appName + '</td>' +
+					'<td>' + esc(appName) + '</td>' +
 					'<td>' + esc(item.bytes_fmt || bytesToSize(bytes)) + '</td>' +
 					'<td>' + esc(percent + '%') + '</td>' +
 					'<td style="width:200px;">' +
