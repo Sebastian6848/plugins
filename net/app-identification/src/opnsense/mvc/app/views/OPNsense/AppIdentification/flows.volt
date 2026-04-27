@@ -137,6 +137,7 @@ All rights reserved.
 		'use strict';
 
 		let autoRefreshTimer = null;
+		let customApplicationRules = [];
 
 		function showApiError(title, message, retryFn) {
 			const buttons = [{
@@ -229,6 +230,98 @@ All rights reserved.
 				return '';
 			}
 			return new Date(value * 1000).toLocaleString();
+		}
+
+		function loadCustomApplicationRules() {
+			ajaxCall('/api/appidentification/rule/list', {}, function (data) {
+				customApplicationRules = data && Array.isArray(data.rules) ? data.rules : [];
+				if ($('#grid-flows').data('bootgrid')) {
+					$('#grid-flows').bootgrid('reload');
+				}
+			});
+		}
+
+		function ipv4ToNumber(ip) {
+			const parts = String(ip || '').split('.');
+			if (parts.length !== 4) {
+				return null;
+			}
+
+			let value = 0;
+			for (let idx = 0; idx < parts.length; idx++) {
+				if (!/^\d+$/.test(parts[idx])) {
+					return null;
+				}
+				const octet = Number(parts[idx]);
+				if (octet < 0 || octet > 255) {
+					return null;
+				}
+				value = (value * 256) + octet;
+			}
+
+			return value >>> 0;
+		}
+
+		function ipInCidr(ip, cidr) {
+			const bits = String(cidr || '').split('/');
+			if (bits.length !== 2 || !/^\d+$/.test(bits[1])) {
+				return false;
+			}
+
+			const ipValue = ipv4ToNumber(ip);
+			const networkValue = ipv4ToNumber(bits[0]);
+			const prefix = Number(bits[1]);
+			if (ipValue === null || networkValue === null || prefix < 0 || prefix > 32) {
+				return false;
+			}
+
+			const mask = prefix === 0 ? 0 : (0xffffffff << (32 - prefix)) >>> 0;
+			return (ipValue & mask) === (networkValue & mask);
+		}
+
+		function matchCustomRule(row) {
+			const serverName = String(row.server_name || '').toLowerCase();
+			const serverIp = String(row.server_ip || '');
+			const clientIp = String(row.client_ip || '');
+			const serverPort = String(row.server_port || '');
+
+			for (let idx = 0; idx < customApplicationRules.length; idx++) {
+				const rule = customApplicationRules[idx] || {};
+				const type = String(rule.match_type || '');
+				const value = String(rule.match_value || '').trim();
+				if (value === '') {
+					continue;
+				}
+
+				if (type === 'domain' && serverName.indexOf(value.toLowerCase()) !== -1) {
+					return rule;
+				}
+				if (type === 'ip' && (serverIp === value || clientIp === value)) {
+					return rule;
+				}
+				if (type === 'cidr' && (ipInCidr(serverIp, value) || ipInCidr(clientIp, value))) {
+					return rule;
+				}
+				if (type === 'port' && serverPort === value) {
+					return rule;
+				}
+			}
+
+			return null;
+		}
+
+		function renderProtocol(row) {
+			const original = row.l7_proto || row.info || row.protocol || '';
+			const rule = matchCustomRule(row);
+			if (!rule) {
+				return bootstrapSafe(row.protocol || original || '-');
+			}
+
+			const l4 = row.l4_proto ? bootstrapSafe(row.l4_proto) + ':' : '';
+			return l4 +
+				'<span class="label label-primary" title="{{ lang._('底层协议') }}: ' + bootstrapSafe(original || '-') + '">' +
+				bootstrapSafe(rule.app_label || '') +
+				'</span> <small class="text-muted">' + bootstrapSafe(original || '-') + '</small>';
 		}
 
 		function endpointLabel(endpoint) {
@@ -481,6 +574,9 @@ All rights reserved.
 					},
 					flow_path: function (column, row) {
 						return '<span>' + bootstrapSafe(row.client || '') + '</span> <span class="fa fa-exchange"></span> <span>' + bootstrapSafe(row.server || '') + '</span>';
+					},
+					protocol: function (column, row) {
+						return renderProtocol(row);
 					}
 				}
 			}
@@ -563,6 +659,7 @@ All rights reserved.
 			$('#grid-flows').bootgrid('reload');
 		});
 
+		loadCustomApplicationRules();
 		loadApplicationOptions();
 		$('.selectpicker').selectpicker('refresh');
 		setAutoRefresh(true);
@@ -651,7 +748,7 @@ All rights reserved.
 					<th data-column-id="commands" data-formatter="commands" data-sortable="false" data-width="70">{{ lang._('操作') }}</th>
 					<th data-column-id="last_seen" data-type="string">{{ lang._('最后见到') }}</th>
 					<th data-column-id="duration" data-type="string">{{ lang._('持续时间') }}</th>
-					<th data-column-id="protocol" data-type="string">{{ lang._('协议') }}</th>
+					<th data-column-id="protocol" data-formatter="protocol" data-type="string">{{ lang._('协议') }}</th>
 					<th data-column-id="score" data-type="numeric">{{ lang._('分数') }}</th>
 					<th data-column-id="flow_path" data-formatter="flow_path" data-sortable="false">{{ lang._('流（客户端→服务器）') }}</th>
 					<th data-column-id="throughput" data-type="string">{{ lang._('实际值') }}</th>
@@ -659,6 +756,10 @@ All rights reserved.
 					<th data-column-id="info" data-type="string">{{ lang._('信息') }}</th>
 					<th data-column-id="client" data-visible="false">client</th>
 					<th data-column-id="server" data-visible="false">server</th>
+					<th data-column-id="client_ip" data-visible="false">client_ip</th>
+					<th data-column-id="server_ip" data-visible="false">server_ip</th>
+					<th data-column-id="server_name" data-visible="false">server_name</th>
+					<th data-column-id="server_port" data-visible="false">server_port</th>
 				</tr>
 				</thead>
 				<tbody></tbody>

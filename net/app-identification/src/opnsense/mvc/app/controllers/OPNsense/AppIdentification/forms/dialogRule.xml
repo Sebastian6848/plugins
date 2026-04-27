@@ -1,22 +1,37 @@
 <form>
     <field>
-        <id>rule.host</id>
-        <label>Host</label>
+        <id>rule.enabled</id>
+        <label>Enabled</label>
+        <type>checkbox</type>
+        <help>Enable this rule for live flow application matching.</help>
+        <grid_view>
+            <width>6em</width>
+            <type>boolean</type>
+            <formatter>rowtoggle</formatter>
+        </grid_view>
+    </field>
+    <field>
+        <id>rule.description</id>
+        <label>Description</label>
         <type>text</type>
-        <help>Host, domain, IP or CIDR to match.</help>
+        <help>Optional note to describe why this custom application rule exists.</help>
     </field>
     <field>
-        <id>rule.application</id>
-        <label>Application Name</label>
+        <id>rule.match_type</id>
+        <label>Match Type</label>
+        <type>dropdown</type>
+        <help>Select which flow field should be matched. Domain checks server.name, IP and CIDR check client/server IPs, and port checks server.port.</help>
+    </field>
+    <field>
+        <id>rule.match_value</id>
+        <label>Match Value</label>
         <type>text</type>
-        <help>Custom application name mapped to the host match.</help>
+        <help>Value to match, for example alicdn.com, 10.10.10.132, 10.10.10.0/24, or 443.</help>
     </field>
     <field>
-        <id>rule.index</id>
-        <type>hidden</type>
-    </field>
-    <field>
-        <id>rule.action</id>
-        <type>hidden</type>
+        <id>rule.app_label</id>
+        <label>Application Label</label>
+        <type>text</type>
+        <help>Custom application name shown in the active flow protocol column when this rule matches.</help>
     </field>
 </form>

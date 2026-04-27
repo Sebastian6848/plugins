@@ -109,5 +109,32 @@
 		<extra_options type="TextField">
 			<Required>N</Required>
 		</extra_options>
+		<rules>
+			<rule type="ArrayField">
+				<enabled type="BooleanField">
+					<Default>1</Default>
+					<Required>Y</Required>
+				</enabled>
+				<description type="TextField">
+					<Required>N</Required>
+				</description>
+				<match_type type="OptionField">
+					<Required>Y</Required>
+					<Default>domain</Default>
+					<OptionValues>
+						<domain value="domain">Domain substring</domain>
+						<ip value="ip">Exact IP</ip>
+						<cidr value="cidr">CIDR network</cidr>
+						<port value="port">Destination port</port>
+					</OptionValues>
+				</match_type>
+				<match_value type="TextField">
+					<Required>Y</Required>
+				</match_value>
+				<app_label type="TextField">
+					<Required>Y</Required>
+				</app_label>
+			</rule>
+		</rules>
 	</items>
 </model>
