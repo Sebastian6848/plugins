@@ -54,34 +54,6 @@ All rights reserved.
 			return value.toFixed(2) + ' ' + units[idx];
 		}
 
-		function loadAppList(data) {
-			const tbody = $('#app-list-body');
-			tbody.empty();
-
-			if (!data || !Array.isArray(data.labels) || data.labels.length === 0) {
-				tbody.append('<tr><td colspan="3" class="text-center text-muted">{{ lang._('暂无数据') }}</td></tr>');
-				return;
-			}
-
-			const series = Array.isArray(data.series) ? data.series : [];
-			const total = series.reduce(function (sum, value) {
-				return sum + Number(value || 0);
-			}, 0);
-			let rows = '';
-
-			data.labels.forEach(function (label, idx) {
-				const bytes = Number(series[idx] || 0);
-				const percent = total > 0 ? (bytes / total * 100).toFixed(1) : '0.0';
-				rows += '<tr>' +
-					'<td>' + esc(label) + '</td>' +
-					'<td>' + esc(bytesToSize(bytes)) + '</td>' +
-					'<td>' + esc(percent + '%') + '</td>' +
-					'</tr>';
-			});
-
-			tbody.html(rows);
-		}
-
 		function normalizeColor(color) {
 			const value = String(color || '').replace(/cc$/i, '');
 			return /^#[0-9a-f]{3,8}$/i.test(value) ? value : '#337ab7';
@@ -127,7 +99,6 @@ All rights reserved.
 			ajaxCall('/api/appidentification/applications/getL7Stats', {}, function (response) {
 				if (!response || response.status === 'error') {
 					$('#l7-stats-body').html('<tr><td colspan="4" class="text-center text-muted">{{ lang._('暂无应用流量数据') }}</td></tr>');
-					$('#app-list-body').html('<tr><td colspan="3" class="text-center text-muted">{{ lang._('暂无数据') }}</td></tr>');
 					showApiError('{{ lang._('加载应用数据失败') }}', (response && response.message) ? response.message : '{{ lang._('Unable to load application data') }}', loadL7Stats);
 					return;
 				}
@@ -135,12 +106,46 @@ All rights reserved.
 				const data = response.data || {};
 				if (!data.labels) {
 					renderL7StatsTable(data);
-					loadAppList(data);
 					return;
 				}
 
 				renderL7StatsTable(data);
-				loadAppList(data);
+			});
+		}
+
+		function renderHostRole(host) {
+			const asClient = Number(host.as_client || 0);
+			const asServer = Number(host.as_server || 0);
+			if (asClient > 0 && asServer > 0) {
+				return '<span class="label label-info">{{ lang._('双向') }}</span>';
+			}
+			if (asClient > 0) {
+				return '<span class="label label-primary">{{ lang._('客户端') }}</span>';
+			}
+			return '<span class="label label-success">{{ lang._('服务器') }}</span>';
+		}
+
+		function loadTopHosts() {
+			ajaxCall('/api/appidentification/applications/getTopHosts', {}, function (response) {
+				if (!response || response.status !== 'ok' || !Array.isArray(response.data) || response.data.length === 0) {
+					$('#top-hosts-body').html('<tr><td colspan="5" class="text-center text-muted">{{ lang._('暂无主机数据') }}</td></tr>');
+					return;
+				}
+
+				let rows = '';
+				response.data.forEach(function (host) {
+					const ip = host.ip || '';
+					const name = host.name && host.name !== ip ? host.name : '-';
+					rows += '<tr>' +
+						'<td><code>' + esc(ip) + '</code></td>' +
+						'<td>' + esc(name) + '</td>' +
+						'<td>' + esc(host.flows || 0) + '</td>' +
+						'<td>' + esc(host.bytes_fmt || bytesToSize(host.bytes || 0)) + '</td>' +
+						'<td>' + renderHostRole(host) + '</td>' +
+						'</tr>';
+				});
+
+				$('#top-hosts-body').html(rows);
 			});
 		}
 
@@ -245,6 +250,7 @@ All rights reserved.
 					$('#DialogRule').modal('hide');
 					loadRules();
 					loadL7Stats();
+					loadTopHosts();
 				}, function () {
 					$saveButton.prop('disabled', false);
 				});
@@ -282,6 +288,7 @@ All rights reserved.
 						applyRulesAfterSave(function () {
 							loadRules();
 							loadL7Stats();
+							loadTopHosts();
 						});
 					});
 				}
@@ -290,6 +297,7 @@ All rights reserved.
 
 		$('#reload-app-data').on('click', function () {
 			loadL7Stats();
+			loadTopHosts();
 			loadRules();
 		});
 
@@ -297,12 +305,17 @@ All rights reserved.
 			onAction: function () {
 				loadRules();
 				loadL7Stats();
+				loadTopHosts();
 			}
 		});
 
 		loadL7Stats();
+		loadTopHosts();
 		loadRules();
-		setInterval(loadL7Stats, 30000);
+		setInterval(function () {
+			loadL7Stats();
+			loadTopHosts();
+		}, 30000);
 
 		$(document).ajaxError(function (event, xhr, settings) {
 			if (settings && settings.url && settings.url.indexOf('/api/appidentification/') === 0) {
@@ -344,16 +357,22 @@ All rights reserved.
 					<span class="fa fa-refresh"></span> {{ lang._('Refresh') }}
 				</button>
 			</div>
-			<h3>{{ lang._('应用列表') }}</h3>
+			<h4>{{ lang._('Top 10 主机流量排行') }}</h4>
 			<table class="table table-condensed table-hover table-striped table-responsive">
 				<thead>
 				<tr>
-					<th>{{ lang._('应用名称') }}</th>
+					<th>{{ lang._('IP 地址') }}</th>
+					<th>{{ lang._('主机名') }}</th>
+					<th>{{ lang._('活跃流') }}</th>
 					<th>{{ lang._('总流量') }}</th>
-					<th>{{ lang._('占比') }}</th>
+					<th>{{ lang._('角色') }}</th>
 				</tr>
 				</thead>
-				<tbody id="app-list-body"></tbody>
+				<tbody id="top-hosts-body">
+				<tr>
+					<td colspan="5" class="text-center text-muted">{{ lang._('加载中...') }}</td>
+				</tr>
+				</tbody>
 			</table>
 		</div>
 	</div>

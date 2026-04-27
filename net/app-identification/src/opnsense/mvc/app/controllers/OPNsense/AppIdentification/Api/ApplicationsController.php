@@ -174,6 +174,83 @@ class ApplicationsController extends GeneralController
 	}
 
 	/**
+	 * Return Top 10 hosts aggregated from active flows.
+	 *
+	 * @return array
+	 */
+	public function getTopHostsAction(): array
+	{
+		try {
+			$flowResult = $this->proxyRequest('flow/active.lua', [
+				'ifid' => $this->getIfid(),
+				'perPage' => 200
+			]);
+			if (($flowResult['status'] ?? '') === 'error') {
+				return $flowResult;
+			}
+
+			$flows = $flowResult['rsp']['data'] ?? [];
+			$hosts = [];
+
+			foreach ($flows as $flow) {
+				if (!is_array($flow)) {
+					continue;
+				}
+
+				$bytes = (int)($flow['bytes'] ?? 0);
+
+				foreach (['client', 'server'] as $role) {
+					$endpoint = is_array($flow[$role] ?? null) ? $flow[$role] : [];
+					$ip = trim((string)($endpoint['ip'] ?? ''));
+					$name = trim((string)($endpoint['name'] ?? $ip));
+					if ($ip === '') {
+						continue;
+					}
+
+					if (!isset($hosts[$ip])) {
+						$hosts[$ip] = [
+							'ip' => $ip,
+							'name' => $name !== '' ? $name : $ip,
+							'bytes' => 0,
+							'flows' => 0,
+							'as_client' => 0,
+							'as_server' => 0,
+						];
+					}
+
+					$hosts[$ip]['bytes'] += $bytes;
+					$hosts[$ip]['flows'] += 1;
+					if ($role === 'client') {
+						$hosts[$ip]['as_client']++;
+					} else {
+						$hosts[$ip]['as_server']++;
+					}
+				}
+			}
+
+			usort($hosts, function ($left, $right) {
+				return $right['bytes'] <=> $left['bytes'];
+			});
+			$hosts = array_slice(array_values($hosts), 0, 10);
+
+			foreach ($hosts as &$host) {
+				$host['bytes_fmt'] = $this->formatBytes((int)$host['bytes']);
+			}
+			unset($host);
+
+			return [
+				'status' => 'ok',
+				'data' => $hosts
+			];
+		} catch (\Throwable $e) {
+			return [
+				'status' => 'error',
+				'message' => sprintf('Unable to retrieve top hosts: %s', $e->getMessage())
+			];
+		}
+	}
+
+	/**
 	 * Get one custom rule for dialog form editing.
 	 *
 	 * @param string $index
@@ -720,6 +797,29 @@ class ApplicationsController extends GeneralController
 		}
 
 		return 0.0;
+	}
+
+	/**
+	 * Format bytes to a compact human-readable string.
+	 *
+	 * @param int $bytes
+	 * @return string
+	 */
+	private function formatBytes(int $bytes): string
+	{
+		if ($bytes >= 1099511627776) {
+			return round($bytes / 1099511627776, 2) . ' TB';
+		}
+		if ($bytes >= 1073741824) {
+			return round($bytes / 1073741824, 2) . ' GB';
+		}
+		if ($bytes >= 1048576) {
+			return round($bytes / 1048576, 2) . ' MB';
+		}
+		if ($bytes >= 1024) {
+			return round($bytes / 1024, 2) . ' KB';
+		}
+		return $bytes . ' B';
 	}
 
 	/**
