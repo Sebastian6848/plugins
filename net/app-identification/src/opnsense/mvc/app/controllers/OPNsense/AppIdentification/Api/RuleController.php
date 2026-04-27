@@ -175,7 +175,7 @@ class RuleController extends ApiMutableModelControllerBase
 		];
 	}
 
-	public function templateAction(string $format = '')
+	public function templateAction(string $format = ''): array|string
 	{
 		$format = strtolower(trim($format));
 		if ($format === 'csv') {
@@ -187,7 +187,7 @@ class RuleController extends ApiMutableModelControllerBase
 		return ['status' => 'error', 'message' => 'Template format must be csv or json.'];
 	}
 
-	public function exportAction(string $format = '')
+	public function exportAction(string $format = ''): array|string
 	{
 		$format = strtolower(trim($format));
 		$rules = $this->collectRules();
@@ -417,14 +417,13 @@ class RuleController extends ApiMutableModelControllerBase
 			. "]\n";
 	}
 
-	private function downloadText(string $content, string $filename, string $contentType)
+	private function downloadText(string $content, string $filename, string $contentType): string
 	{
 		$this->response->setHeader('Content-Type', $contentType);
 		$this->response->setHeader('Content-Transfer-Encoding', 'binary');
 		$this->response->setHeader('Pragma', 'no-cache');
 		$this->response->setHeader('Expires', '0');
 		$this->response->setHeader('Content-Disposition', 'attachment; filename="' . $filename . '"');
-		$this->response->setContent($content);
-		return $this->response;
+		return $content;
 	}
 }
