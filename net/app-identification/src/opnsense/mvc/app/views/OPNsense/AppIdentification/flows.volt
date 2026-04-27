@@ -130,6 +130,23 @@ All rights reserved.
 .flow-detail-bar-server {
 	background: #159957;
 }
+.flow-detail-extra-title {
+	background: #e8e8e8 !important;
+	font-weight: 600;
+}
+.flow-detail-value-list {
+	margin: 0;
+	padding-left: 18px;
+}
+.flow-detail-pre {
+	margin: 0;
+	white-space: pre-wrap;
+	word-break: break-word;
+	background: transparent;
+	border: 0;
+	padding: 0;
+	font-size: 12px;
+}
 </style>
 
 <script>
@@ -311,17 +328,39 @@ All rights reserved.
 		}
 
 		function renderProtocol(row) {
-			const original = row.l7_proto || row.info || row.protocol || '';
-			const rule = matchCustomRule(row);
-			if (!rule) {
-				return bootstrapSafe(row.protocol || original || '-');
+			return bootstrapSafe(row.protocol || row.l7_proto || row.info || '-');
+		}
+
+		function applicationLabelFromProtocol(protocol) {
+			const value = String(protocol || '').trim();
+			if (value === '') {
+				return '';
 			}
 
-			const l4 = row.l4_proto ? bootstrapSafe(row.l4_proto) + ':' : '';
-			return l4 +
-				'<span class="label label-primary" title="{{ lang._('底层协议') }}: ' + bootstrapSafe(original || '-') + '">' +
-				bootstrapSafe(rule.app_label || '') +
-				'</span> <small class="text-muted">' + bootstrapSafe(original || '-') + '</small>';
+			const parts = value.split('.');
+			if (parts.length > 1) {
+				const label = parts.slice(1).join('.').trim();
+				if (label !== '') {
+					return label;
+				}
+			}
+
+			return value;
+		}
+
+		function renderApplicationInfo(row) {
+			const original = row.l7_proto || row.info || '';
+			const rule = matchCustomRule(row);
+			const label = rule ? String(rule.app_label || '') : applicationLabelFromProtocol(original);
+
+			if (label === '') {
+				return '';
+			}
+
+			const labelClass = rule ? 'label-primary' : 'label-info';
+			return '<span class="label ' + labelClass + '" title="{{ lang._('底层协议') }}: ' + bootstrapSafe(original || '-') + '">' +
+				bootstrapSafe(label) +
+				'</span>';
 		}
 
 		function endpointLabel(endpoint) {
@@ -408,6 +447,145 @@ All rights reserved.
 			});
 		}
 
+		function isPlainObject(value) {
+			return value !== null && typeof value === 'object' && !Array.isArray(value);
+		}
+
+		function formatDetailLabel(key) {
+			return String(key || '')
+				.replace(/_/g, ' ')
+				.replace(/\b\w/g, function (letter) {
+					return letter.toUpperCase();
+				});
+		}
+
+		function renderPrimitiveDetailValue(value) {
+			if (value === null || value === undefined || value === '') {
+				return '-';
+			}
+			if (typeof value === 'boolean') {
+				return value ? 'true' : 'false';
+			}
+			return bootstrapSafe(value);
+		}
+
+		function renderDetailValue(value, depth) {
+			if (Array.isArray(value)) {
+				if (value.length === 0) {
+					return '-';
+				}
+				const primitiveOnly = value.every(function (item) {
+					return item === null || typeof item !== 'object';
+				});
+				if (primitiveOnly) {
+					return '<ul class="flow-detail-value-list">' + value.map(function (item) {
+						return '<li>' + renderPrimitiveDetailValue(item) + '</li>';
+					}).join('') + '</ul>';
+				}
+				return '<pre class="flow-detail-pre">' + bootstrapSafe(JSON.stringify(value, null, 2)) + '</pre>';
+			}
+
+			if (isPlainObject(value)) {
+				const keys = Object.keys(value);
+				if (keys.length === 0) {
+					return '-';
+				}
+				if (depth >= 2) {
+					return '<pre class="flow-detail-pre">' + bootstrapSafe(JSON.stringify(value, null, 2)) + '</pre>';
+				}
+				return keys.map(function (key) {
+					return '<div><strong>' + bootstrapSafe(formatDetailLabel(key)) + ':</strong> ' + renderDetailValue(value[key], depth + 1) + '</div>';
+				}).join('');
+			}
+
+			return renderPrimitiveDetailValue(value);
+		}
+
+		function renderExtraDetailRows(detail) {
+			const consumed = {
+				breakdown: true,
+				bytes: true,
+				client: true,
+				duration: true,
+				first_seen: true,
+				flow_key: true,
+				hash_id: true,
+				key: true,
+				last_seen: true,
+				protocol: true,
+				score: true,
+				server: true,
+				tcp_flags: true,
+				thpt: true,
+				vlan: true
+			};
+			const priority = [
+				'tcp_fingerprint',
+				'rtt',
+				'application_latency',
+				'packet_interarrival_time',
+				'tcp_goodput',
+				'tcp_stats',
+				'tcp_flags_analysis',
+				'issues',
+				'alerts',
+				'community_id',
+				'goodput',
+				'actual_peak_throughput',
+				'http',
+				'tls',
+				'ja3',
+				'ja4',
+				'dns',
+				'payload'
+			];
+			const keys = Object.keys(detail || {}).filter(function (key) {
+				return !consumed[key];
+			}).sort(function (left, right) {
+				const li = priority.indexOf(left);
+				const ri = priority.indexOf(right);
+				if (li !== -1 || ri !== -1) {
+					return (li === -1 ? 999 : li) - (ri === -1 ? 999 : ri);
+				}
+				return left.localeCompare(right);
+			});
+
+			let rows = '';
+			keys.forEach(function (key) {
+				const value = detail[key];
+				if (value === null || value === undefined || value === '' || (Array.isArray(value) && value.length === 0)) {
+					return;
+				}
+				rows += '<tr><th>' + bootstrapSafe(formatDetailLabel(key)) + '</th><td colspan="2">' + renderDetailValue(value, 0) + '</td></tr>';
+			});
+
+			return rows;
+		}
+
+		function renderObjectRemainderRow(title, value, consumedKeys) {
+			if (!isPlainObject(value)) {
+				return '';
+			}
+
+			const consumed = {};
+			consumedKeys.forEach(function (key) {
+				consumed[key] = true;
+			});
+
+			const remainder = {};
+			Object.keys(value).forEach(function (key) {
+				if (!consumed[key] && value[key] !== null && value[key] !== undefined && value[key] !== '') {
+					remainder[key] = value[key];
+				}
+			});
+
+			if (Object.keys(remainder).length === 0) {
+				return '';
+			}
+
+			return '<tr><th>' + bootstrapSafe(title) + '</th><td colspan="2">' + renderDetailValue(remainder, 0) + '</td></tr>';
+		}
+
 		function renderFlowDetail(data) {
 			const detail = data.detail || {};
 			const row = data.row || {};
@@ -444,6 +622,12 @@ All rights reserved.
 			html += '<tr><th>TCP Flags</th><td colspan="2">' + bootstrapSafe(detail.tcp_flags || '-') + '</td></tr>';
 			html += '<tr><th>{{ lang._("客户端") }}</th><td colspan="2">' + endpointLabel(client) + ' | IP: ' + bootstrapSafe(client.ip || '') + ' | Port: ' + bootstrapSafe(client.port || '') + '</td></tr>';
 			html += '<tr><th>{{ lang._("服务器") }}</th><td colspan="2">' + endpointLabel(server) + ' | IP: ' + bootstrapSafe(server.ip || '') + ' | Port: ' + bootstrapSafe(server.port || '') + '</td></tr>';
+			html += renderObjectRemainderRow('{{ lang._("客户端详细信息") }}', client, ['ip', 'name', 'port']);
+			html += renderObjectRemainderRow('{{ lang._("服务器详细信息") }}', server, ['ip', 'name', 'port']);
+			html += renderObjectRemainderRow('{{ lang._("协议详细信息") }}', protocol, ['l4', 'l7']);
+			html += renderObjectRemainderRow('{{ lang._("吞吐量详细信息") }}', thpt, ['bps', 'pps']);
+			html += renderObjectRemainderRow('{{ lang._("流量方向详细信息") }}', breakdown, ['cli2srv', 'srv2cli']);
+			html += renderExtraDetailRows(detail);
 			html += '</tbody>';
 			html += '</table>';
 			html += '</div>';
@@ -577,6 +761,9 @@ All rights reserved.
 					},
 					protocol: function (column, row) {
 						return renderProtocol(row);
+					},
+					info: function (column, row) {
+						return renderApplicationInfo(row);
 					}
 				}
 			}
@@ -753,7 +940,7 @@ All rights reserved.
 					<th data-column-id="flow_path" data-formatter="flow_path" data-sortable="false">{{ lang._('流（客户端→服务器）') }}</th>
 					<th data-column-id="throughput" data-type="string">{{ lang._('实际值') }}</th>
 					<th data-column-id="total_bytes" data-type="string">{{ lang._('总字节数') }}</th>
-					<th data-column-id="info" data-type="string">{{ lang._('信息') }}</th>
+					<th data-column-id="info" data-formatter="info" data-type="string">{{ lang._('信息') }}</th>
 					<th data-column-id="client" data-visible="false">client</th>
 					<th data-column-id="server" data-visible="false">server</th>
 					<th data-column-id="client_ip" data-visible="false">client_ip</th>

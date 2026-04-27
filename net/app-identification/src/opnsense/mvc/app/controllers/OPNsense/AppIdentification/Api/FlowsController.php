@@ -127,7 +127,8 @@ class FlowsController extends GeneralController
 			$payload = $this->proxyRequest('flow/data.lua', $params);
 
 			if (($payload['status'] ?? '') !== 'error') {
-				$detail = $this->findFlowRecordByKey($this->extractFlowRecords($payload), $flowKey);
+				$records = $this->extractFlowRecords($payload);
+				$detail = count($records) === 1 ? $records[0] : $this->findFlowRecordByKey($records, $flowKey);
 			}
 
 			if ($detail === null) {
@@ -237,16 +238,34 @@ class FlowsController extends GeneralController
 			$payload['rows'] ?? null,
 			$payload['data'] ?? null,
 			$payload['flows'] ?? null,
+			$payload['flow'] ?? null,
+			$payload['rsp'] ?? null,
+			$payload['rsp']['flow'] ?? null,
+			$payload['rsp']['detail'] ?? null,
+			$payload['rsp']['record'] ?? null,
 			$payload['rsp']['data'] ?? null,
 			$payload['rsp']['flows'] ?? null,
+			$payload['response']['flow'] ?? null,
+			$payload['response']['detail'] ?? null,
+			$payload['response']['record'] ?? null,
 			$payload['response']['flows'] ?? null,
 			$payload['response'] ?? null
 		];
 
 		foreach ($candidates as $candidate) {
-			if (is_array($candidate) && $this->isRecordList($candidate)) {
+			if (!is_array($candidate) || $candidate === []) {
+				continue;
+			}
+			if ($this->isFlowRecord($candidate)) {
+				return [$candidate];
+			}
+			if ($this->isRecordList($candidate)) {
 				return array_values($candidate);
 			}
+		}
+
+		if ($this->isFlowRecord($payload)) {
+			return [$payload];
 		}
 
 		if ($this->isRecordList($payload)) {
@@ -254,12 +273,34 @@ class FlowsController extends GeneralController
 		}
 
 		foreach ($payload as $value) {
-			if (is_array($value) && $this->isRecordList($value)) {
+			if (!is_array($value) || $value === []) {
+				continue;
+			}
+			if ($this->isFlowRecord($value)) {
+				return [$value];
+			}
+			if ($this->isRecordList($value)) {
 				return array_values($value);
 			}
 		}
 
 		return [];
+	}
+
+	/**
+	 * Check if an array looks like one flow record instead of a list.
+	 *
+	 * @param array $item
+	 * @return bool
+	 */
+	private function isFlowRecord(array $item): bool
+	{
+		return isset($item['client'])
+			|| isset($item['server'])
+			|| isset($item['protocol'])
+			|| isset($item['key'])
+			|| isset($item['hash_id'])
+			|| isset($item['bytes']);
 	}
 
 	/**
