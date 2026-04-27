@@ -161,6 +161,8 @@ All rights reserved.
 		let flowGridLastResponse = null;
 		let flowGridEmptyRefreshCount = 0;
 		let flowGridCurrentHasFilters = false;
+		const flowRowCache = {};
+		const flowRowCacheTtlMs = 60000;
 
 		function showApiError(title, message, retryFn) {
 			const buttons = [{
@@ -244,6 +246,43 @@ All rights reserved.
 			flowGridLoading = true;
 			$('#grid-flows').bootgrid('reload');
 			preserveFlowRowsDuringLoad();
+		}
+
+		function pruneFlowRowCache(now) {
+			Object.keys(flowRowCache).forEach(function (key) {
+				if ((now - flowRowCache[key].seenAt) > flowRowCacheTtlMs) {
+					delete flowRowCache[key];
+				}
+			});
+		}
+
+		function mergeFlowRows(rows) {
+			const now = Date.now();
+			const orderedKeys = [];
+
+			(rows || []).forEach(function (row) {
+				const key = String(row.flow_key || '');
+				if (key === '') {
+					return;
+				}
+				flowRowCache[key] = {
+					row: $.extend(true, {}, row),
+					seenAt: now
+				};
+				orderedKeys.push(key);
+			});
+
+			pruneFlowRowCache(now);
+
+			Object.keys(flowRowCache).forEach(function (key) {
+				if (orderedKeys.indexOf(key) === -1) {
+					orderedKeys.push(key);
+				}
+			});
+
+			return orderedKeys.map(function (key) {
+				return $.extend(true, {}, flowRowCache[key].row);
+			});
 		}
 
 		function bootstrapSafe(value) {
@@ -714,8 +753,30 @@ All rights reserved.
 			}
 
 			closeAllFlowActionMenus();
+			const cached = flowRowCache[String(flowKey)] ? $.extend(true, {}, flowRowCache[String(flowKey)].row) : null;
 			ajaxCall('/api/appidentification/flows/getFlowDetail', {flow_key: flowKey}, function (data) {
 				if (!data || data.status === 'error') {
+					if (cached !== null) {
+						const cachedDetailView = renderFlowDetail({
+							status: 'ok',
+							flow_key: flowKey,
+							detail: cached.detail || cached,
+							row: cached
+						});
+						BootstrapDialog.show({
+							type: BootstrapDialog.TYPE_INFO,
+							cssClass: 'flow-detail-dialog',
+							title: cachedDetailView.title,
+							message: cachedDetailView.body,
+							buttons: [{
+								label: "{{ lang._('Close') }}",
+								action: function (dialog) {
+									dialog.close();
+								}
+							}]
+						});
+						return;
+					}
 					const backendMessage = (data && data.message) ? data.message : "{{ lang._('Unable to retrieve flow details') }}";
 					const userMessage = backendMessage.indexOf('expired') !== -1 ? "{{ lang._('流已过期') }}" : backendMessage;
 					showApiError("{{ lang._('获取流详情失败') }}", userMessage);
@@ -792,14 +853,28 @@ All rights reserved.
 				},
 				responseHandler: function (data) {
 					if (data && Array.isArray(data.rows) && data.rows.length > 0) {
+						if (flowGridCurrentHasFilters) {
+							mergeFlowRows(data.rows);
+						} else {
+							data.rows = mergeFlowRows(data.rows);
+						}
+						data.total = data.rows.length;
 						flowGridLastResponse = $.extend(true, {}, data);
 						flowGridEmptyRefreshCount = 0;
 						return data;
 					}
 
-					if (data && Array.isArray(data.rows) && data.rows.length === 0 && flowGridLastResponse !== null && !flowGridCurrentHasFilters) {
+					if (data && Array.isArray(data.rows) && data.rows.length === 0 && !flowGridCurrentHasFilters) {
+						const cachedRows = mergeFlowRows([]);
+						if (cachedRows.length > 0) {
+							data.rows = cachedRows;
+							data.total = cachedRows.length;
+							flowGridLastResponse = $.extend(true, {}, data);
+							return data;
+						}
+
 						flowGridEmptyRefreshCount += 1;
-						if (flowGridEmptyRefreshCount < 2) {
+						if (flowGridLastResponse !== null && flowGridEmptyRefreshCount < 2) {
 							return $.extend(true, {}, flowGridLastResponse);
 						}
 					}

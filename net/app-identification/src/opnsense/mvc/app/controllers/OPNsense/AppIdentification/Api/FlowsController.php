@@ -363,7 +363,8 @@ class FlowsController extends GeneralController
 			'bytes_raw' => $bytes,
 			'breakdown' => $record['breakdown'] ?? [],
 			'is_blacklisted' => ($client['is_blacklisted'] ?? false) || ($server['is_blacklisted'] ?? false),
-			'info' => $l7
+			'info' => $l7,
+			'detail' => $record
 		];
 	}
 
