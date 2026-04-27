@@ -19,6 +19,8 @@ All rights reserved.
 				<button class="btn btn-primary" id="saveAct" type="button"><b>{{ lang._('Save') }}</b> <i id="saveAct_progress"></i></button>
 				<button class="btn btn-default" id="testAct" type="button"><span class="fa fa-plug"></span> {{ lang._('Test Connection') }} <i id="testAct_progress"></i></button>
 				<button class="btn btn-default" id="restartAct" type="button"><span class="fa fa-refresh"></span> {{ lang._('Restart ntopng') }} <i id="restartAct_progress"></i></button>
+				<button class="btn btn-default" id="openNtopngAct" type="button"><span class="fa fa-external-link"></span> {{ lang._('在 ntopng 中查看') }}</button>
+				<button class="btn btn-default" id="ntopngGuideAct" type="button" title="{{ lang._('配置指引') }}"><span class="fa fa-info-circle text-info"></span> {{ lang._('配置指引') }}</button>
 			</div>
 		</div>
 	</div>
@@ -72,6 +74,37 @@ All rights reserved.
 </div>
 
 {{ partial("layout_partials/base_dialog",['fields':formDialogRule,'id':'DialogRule','label':lang._('Edit Custom Rule')]) }}
+
+<div class="modal fade" id="ntopngGuideModal" tabindex="-1" role="dialog" aria-labelledby="ntopngGuideModalLabel">
+	<div class="modal-dialog modal-lg" role="document">
+		<div class="modal-content">
+			<div class="modal-header">
+				<button type="button" class="close" data-dismiss="modal" aria-label="{{ lang._('Close') }}"><span aria-hidden="true">&times;</span></button>
+				<h4 class="modal-title" id="ntopngGuideModalLabel">{{ lang._('ntopng 初次配置指引') }}</h4>
+			</div>
+			<div class="modal-body">
+				<ol>
+					<li>
+						<p><strong>{{ lang._('第一步：修改默认密码') }}</strong></p>
+						<p>{{ lang._('打开 ntopng 页面（可点击上方“在 ntopng 中查看”按钮），使用默认账号 admin / admin 登录，进入') }} <code>Settings &rarr; Users &rarr; admin</code>{{ lang._('，修改密码。') }}</p>
+					</li>
+					<li>
+						<p><strong>{{ lang._('第二步：生成 API Token') }}</strong></p>
+						<p>{{ lang._('在 ntopng 页面中进入') }} <code>Settings &rarr; API Tokens</code>{{ lang._('，点击“Generate Token”，复制生成的 Token 字符串。') }}</p>
+					</li>
+					<li>
+						<p><strong>{{ lang._('第三步：填写 Auth Token') }}</strong></p>
+						<p>{{ lang._('将复制的 Token 粘贴到本页面“Auth Token”字段中，点击“保存”，然后点击“测试连接”验证配置是否正确。') }}</p>
+					</li>
+				</ol>
+			</div>
+			<div class="modal-footer">
+				<button type="button" class="btn btn-default" data-dismiss="modal">{{ lang._('我知道了') }}</button>
+				<button type="button" class="btn btn-primary" id="ntopngGuideOpenAct"><span class="fa fa-external-link"></span> {{ lang._('直接打开 ntopng') }}</button>
+			</div>
+		</div>
+	</div>
+</div>
 
 <script>
 $(document).ready(function() {
@@ -181,6 +214,38 @@ $(document).ready(function() {
 		});
 	}
 
+	function getNtopngBaseUrl() {
+		const host = $.trim($('#general\\.rest_host').val() || '');
+		if (host === '') {
+			return '';
+		}
+		const scheme = $.trim($('#general\\.rest_scheme').val() || 'http') || 'http';
+		const port = $.trim($('#general\\.http_port').val() || $('#general\\.rest_port').val() || '');
+		const hasScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(host);
+		let url = hasScheme ? host : scheme + '://' + host;
+
+		if (port !== '' && !/:\d+$/.test(url.replace(/\/+$/, ''))) {
+			url = url.replace(/\/+$/, '') + ':' + port;
+		}
+
+		return url;
+	}
+
+	function openNtopngConsole() {
+		const url = getNtopngBaseUrl();
+		if (url === '') {
+			BootstrapDialog.show({
+				type: BootstrapDialog.TYPE_WARNING,
+				title: '{{ lang._('提示') }}',
+				message: esc('{{ lang._('请先填写 ntopng 主机地址') }}'),
+				buttons: [{label: '{{ lang._('Close') }}', action: function(d){ d.close(); }}]
+			});
+			return false;
+		}
+		window.open(url, '_blank', 'noopener');
+		return true;
+	}
+
 	function toggleAuthFields() {
 		$('#general\\.auth_username').closest('.form-group').show();
 		$('#general\\.auth_password').closest('.form-group').show();
@@ -248,6 +313,18 @@ $(document).ready(function() {
 				showApiError('{{ lang._('连接测试失败') }}', msg);
 			}
 		});
+	});
+
+	$('#openNtopngAct').on('click', function () {
+		openNtopngConsole();
+	});
+
+	$('#ntopngGuideAct').on('click', function () {
+		$('#ntopngGuideModal').modal('show');
+	});
+
+	$('#ntopngGuideOpenAct').on('click', function () {
+		openNtopngConsole();
 	});
 
 	function activateHashTab() {
