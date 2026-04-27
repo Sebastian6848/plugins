@@ -155,6 +155,12 @@ All rights reserved.
 
 		let autoRefreshTimer = null;
 		let customApplicationRules = [];
+		let flowGridLoading = false;
+		let flowGridReloadQueued = false;
+		let flowGridLastBodyHtml = '';
+		let flowGridLastResponse = null;
+		let flowGridEmptyRefreshCount = 0;
+		let flowGridCurrentHasFilters = false;
 
 		function showApiError(title, message, retryFn) {
 			const buttons = [{
@@ -203,9 +209,41 @@ All rights reserved.
 
 			if (enabled) {
 				autoRefreshTimer = setInterval(function () {
-					$('#grid-flows').bootgrid('reload');
+					reloadFlows();
 				}, 5000);
 			}
+		}
+
+		function preserveFlowRowsDuringLoad() {
+			const tbody = $('#grid-flows tbody');
+			if (!flowGridLoading || flowGridLastBodyHtml === '') {
+				return;
+			}
+
+			window.setTimeout(function () {
+				const currentHtml = $.trim(tbody.html() || '');
+				const currentText = $.trim(tbody.text() || '').toLowerCase();
+				const looksTransient = currentHtml === '' ||
+					currentText === '' ||
+					currentText.indexOf('loading') !== -1 ||
+					currentText.indexOf('no results') !== -1 ||
+					currentText.indexOf('无结果') !== -1;
+				if (flowGridLoading && looksTransient) {
+					tbody.html(flowGridLastBodyHtml);
+				}
+			}, 50);
+		}
+
+		function reloadFlows() {
+			if (flowGridLoading) {
+				flowGridReloadQueued = true;
+				preserveFlowRowsDuringLoad();
+				return;
+			}
+
+			flowGridLoading = true;
+			$('#grid-flows').bootgrid('reload');
+			preserveFlowRowsDuringLoad();
 		}
 
 		function bootstrapSafe(value) {
@@ -253,7 +291,7 @@ All rights reserved.
 			ajaxCall('/api/appidentification/rule/list', {}, function (data) {
 				customApplicationRules = data && Array.isArray(data.rules) ? data.rules : [];
 				if ($('#grid-flows').data('bootgrid')) {
-					$('#grid-flows').bootgrid('reload');
+					reloadFlows();
 				}
 			});
 		}
@@ -357,7 +395,12 @@ All rights reserved.
 				return '';
 			}
 
-			const labelClass = rule ? 'label-primary' : 'label-info';
+			let labelClass = 'label-warning';
+			if (rule) {
+				labelClass = 'label-danger';
+			} else if (label === 'TLS' || label === 'DNS') {
+				labelClass = 'label-default';
+			}
 			return '<span class="label ' + labelClass + '" title="{{ lang._('底层协议') }}: ' + bootstrapSafe(original || '-') + '">' +
 				bootstrapSafe(label) +
 				'</span>';
@@ -704,7 +747,7 @@ All rights reserved.
 					title: "{{ lang._('Refresh') }}",
 					method: function (event) {
 						event.preventDefault();
-						$('#grid-flows').bootgrid('reload');
+						reloadFlows();
 					},
 					sequence: 40
 				}
@@ -721,6 +764,7 @@ All rights reserved.
 					characters: 1
 				},
 				requestHandler: function (request) {
+					flowGridLoading = true;
 					const filters = readFilters();
 					request.host = filters.host;
 					request.l7_proto = filters.l7_proto;
@@ -735,7 +779,32 @@ All rights reserved.
 						request.searchPhrase = ((request.searchPhrase || '') + ' ' + filters.status).trim();
 					}
 
+					flowGridCurrentHasFilters = filters.host !== '' ||
+						filters.protocol !== '' ||
+						filters.l7_proto !== '' ||
+						filters.status !== '' ||
+						filters.traffic_type !== '' ||
+						filters.host_pool !== '' ||
+						filters.network !== '' ||
+						(request.searchPhrase || '') !== '';
+
 					return request;
+				},
+				responseHandler: function (data) {
+					if (data && Array.isArray(data.rows) && data.rows.length > 0) {
+						flowGridLastResponse = $.extend(true, {}, data);
+						flowGridEmptyRefreshCount = 0;
+						return data;
+					}
+
+					if (data && Array.isArray(data.rows) && data.rows.length === 0 && flowGridLastResponse !== null && !flowGridCurrentHasFilters) {
+						flowGridEmptyRefreshCount += 1;
+						if (flowGridEmptyRefreshCount < 2) {
+							return $.extend(true, {}, flowGridLastResponse);
+						}
+					}
+
+					return data;
 				},
 				formatters: {
 					commands: function (column, row) {
@@ -768,6 +837,8 @@ All rights reserved.
 				}
 			}
 		}).on('loaded.rs.jquery.bootgrid', function () {
+			flowGridLoading = false;
+			flowGridLastBodyHtml = $('#grid-flows tbody').html() || flowGridLastBodyHtml;
 			$(this).closest('.table-responsive').css('overflow', 'visible');
 			$(this).closest('.bootgrid-table').css('overflow', 'visible');
 			installDetachedFlowDropdowns();
@@ -803,6 +874,17 @@ All rights reserved.
 				closeFlowActionMenu(this);
 				showApiError("{{ lang._('获取流详情失败') }}", "{{ lang._('流已过期') }}");
 			});
+
+			if (flowGridReloadQueued) {
+				flowGridReloadQueued = false;
+				window.setTimeout(reloadFlows, 100);
+			}
+		});
+
+		$(document).ajaxComplete(function (event, xhr, settings) {
+			if (settings && settings.url && settings.url.indexOf('/api/appidentification/flows/search') === 0) {
+				flowGridLoading = false;
+			}
 		});
 
 		$(window).on('scroll.flowmenu resize.flowmenu', function () {
@@ -812,7 +894,7 @@ All rights reserved.
 		});
 
 		$('#flow_apply_filters').on('click', function () {
-			$('#grid-flows').bootgrid('reload');
+			reloadFlows();
 		});
 
 		$('#flow_reset_filters').on('click', function () {
@@ -824,11 +906,11 @@ All rights reserved.
 			$('#flow_filter_host_pool').val('');
 			$('#flow_filter_network').val('');
 			$('.selectpicker').selectpicker('refresh');
-			$('#grid-flows').bootgrid('reload');
+			reloadFlows();
 		});
 
 		$('#flow_refresh').on('click', function () {
-			$('#grid-flows').bootgrid('reload');
+			reloadFlows();
 		});
 
 		$('#flow_auto_refresh').on('change', function () {
@@ -838,12 +920,12 @@ All rights reserved.
 		$('#flow_filters input').on('keypress', function (event) {
 			if (event.which === 13) {
 				event.preventDefault();
-				$('#grid-flows').bootgrid('reload');
+				reloadFlows();
 			}
 		});
 
 		$('#flow_filters select').on('change', function () {
-			$('#grid-flows').bootgrid('reload');
+			reloadFlows();
 		});
 
 		loadCustomApplicationRules();
@@ -936,11 +1018,10 @@ All rights reserved.
 					<th data-column-id="last_seen" data-type="string">{{ lang._('最后见到') }}</th>
 					<th data-column-id="duration" data-type="string">{{ lang._('持续时间') }}</th>
 					<th data-column-id="protocol" data-formatter="protocol" data-type="string">{{ lang._('协议') }}</th>
-					<th data-column-id="score" data-type="numeric">{{ lang._('分数') }}</th>
+					<th data-column-id="info" data-formatter="info" data-type="string">{{ lang._('信息') }}</th>
 					<th data-column-id="flow_path" data-formatter="flow_path" data-sortable="false">{{ lang._('流（客户端→服务器）') }}</th>
 					<th data-column-id="throughput" data-type="string">{{ lang._('实际值') }}</th>
 					<th data-column-id="total_bytes" data-type="string">{{ lang._('总字节数') }}</th>
-					<th data-column-id="info" data-formatter="info" data-type="string">{{ lang._('信息') }}</th>
 					<th data-column-id="client" data-visible="false">client</th>
 					<th data-column-id="server" data-visible="false">server</th>
 					<th data-column-id="client_ip" data-visible="false">client_ip</th>
