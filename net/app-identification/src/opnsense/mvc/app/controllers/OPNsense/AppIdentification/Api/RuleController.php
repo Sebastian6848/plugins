@@ -36,11 +36,19 @@ class RuleController extends ApiMutableModelControllerBase
 
 	public function addRuleAction()
 	{
+		$validation = $this->validateRulePayloadFromRequest();
+		if (!empty($validation)) {
+			return ['result' => 'failed', 'validations' => $validation];
+		}
 		return $this->addBase('rule', 'rules.rule');
 	}
 
 	public function setRuleAction($uuid)
 	{
+		$validation = $this->validateRulePayloadFromRequest();
+		if (!empty($validation)) {
+			return ['result' => 'failed', 'validations' => $validation];
+		}
 		return $this->setBase('rule', 'rules.rule', $uuid);
 	}
 
@@ -208,12 +216,14 @@ class RuleController extends ApiMutableModelControllerBase
 		$rules = [];
 
 		foreach ($model->rules->rule->iterateItems() as $uuid => $rule) {
+			$rawMatchValue = (string)$rule->match_value;
 			$rules[] = [
 				'uuid' => (string)$uuid,
 				'enabled' => (string)$rule->enabled,
 				'description' => (string)$rule->description,
 				'match_type' => (string)$rule->match_type,
-				'match_value' => (string)$rule->match_value,
+				'match_value' => $rawMatchValue,
+				'match_values' => $this->splitMatchValues($rawMatchValue),
 				'app_label' => (string)$rule->app_label
 			];
 		}
@@ -267,6 +277,9 @@ class RuleController extends ApiMutableModelControllerBase
 				continue;
 			}
 			$row = array_combine($header, $fields);
+			if (isset($row['match_value'])) {
+				$row['match_value'] = $this->normalizeImportedMatchValue($row['match_value']);
+			}
 			$row['_line'] = $line;
 			$rows[] = $row;
 		}
@@ -297,6 +310,9 @@ class RuleController extends ApiMutableModelControllerBase
 				$errors[] = sprintf('Item %d: rule must be an object.', $idx + 1);
 				continue;
 			}
+			if (array_key_exists('match_value', $row)) {
+				$row['match_value'] = $this->normalizeImportedMatchValue($row['match_value']);
+			}
 			$row['_line'] = $idx + 1;
 			$rows[] = $row;
 		}
@@ -323,8 +339,8 @@ class RuleController extends ApiMutableModelControllerBase
 			if ($clean['match_type'] !== '' && !in_array($clean['match_type'], self::MATCH_TYPES, true)) {
 				$errors[] = sprintf('Line %d: match_type is invalid.', $line);
 			}
-			$valueError = $this->validateMatchValue($clean['match_type'], $clean['match_value']);
-			if ($valueError !== '') {
+			$valueErrors = $this->validateMatchValues($clean['match_type'], $clean['match_value']);
+			foreach ($valueErrors as $valueError) {
 				$errors[] = sprintf('Line %d: %s', $line, $valueError);
 			}
 			$cleanRows[] = $clean;
@@ -342,30 +358,126 @@ class RuleController extends ApiMutableModelControllerBase
 		return '0';
 	}
 
-	private function validateMatchValue(string $type, string $value): string
+	private function validateRulePayloadFromRequest(): array
 	{
-		if ($value === '') {
-			return '';
+		$rule = $this->request->getPost('rule', null, []);
+		if (!is_array($rule)) {
+			return [];
 		}
-		if ($type === 'ip' && filter_var($value, FILTER_VALIDATE_IP) === false) {
-			return 'match_value must be a valid IP address.';
+
+		$type = strtolower(trim((string)($rule['match_type'] ?? '')));
+		$matchValue = (string)($rule['match_value'] ?? '');
+		$errors = $this->validateMatchValues($type, $matchValue);
+		if (empty($errors)) {
+			return [];
 		}
-		if ($type === 'cidr') {
-			$parts = explode('/', $value, 2);
-			if (count($parts) !== 2 || filter_var($parts[0], FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) === false || !ctype_digit($parts[1]) || (int)$parts[1] < 0 || (int)$parts[1] > 32) {
-				return 'match_value must be a valid IPv4 CIDR network.';
+
+		return ['rule.match_value' => implode(' ', $errors)];
+	}
+
+	private function validateMatchValues(string $type, string $value): array
+	{
+		$errors = [];
+		$values = $this->splitMatchValues($value);
+		if (empty($values)) {
+			return ['match_value is required.'];
+		}
+
+		foreach ($values as $lineNo => $item) {
+			$line = $lineNo + 1;
+			if ($type === 'domain') {
+				if (preg_match('/\s/', $item)) {
+					$errors[] = sprintf('match_value line %d must not contain spaces.', $line);
+				}
+				continue;
+			}
+
+			if ($type === 'ip') {
+				if (filter_var($item, FILTER_VALIDATE_IP) === false) {
+					$errors[] = sprintf('match_value line %d must be a valid IP address.', $line);
+				}
+				continue;
+			}
+
+			if ($type === 'cidr') {
+				if (!$this->isValidCidr($item)) {
+					$errors[] = sprintf('match_value line %d must be a valid CIDR notation.', $line);
+				}
+				continue;
+			}
+
+			if ($type === 'port') {
+				if (!ctype_digit($item) || (int)$item < 1 || (int)$item > 65535) {
+					$errors[] = sprintf('match_value line %d must be a port between 1 and 65535.', $line);
+				}
+				continue;
+			}
+
+			if ($type === 'protocol' && $item === '') {
+				$errors[] = sprintf('match_value line %d must not be empty.', $line);
 			}
 		}
-		if ($type === 'port' && (!ctype_digit($value) || (int)$value < 1 || (int)$value > 65535)) {
-			return 'match_value must be a TCP/UDP port between 1 and 65535.';
+
+		return $errors;
+	}
+
+	private function isValidCidr(string $value): bool
+	{
+		$parts = explode('/', $value, 2);
+		if (count($parts) !== 2 || !ctype_digit((string)$parts[1])) {
+			return false;
 		}
-		if ($type === 'domain' && !preg_match('/^[A-Za-z0-9*_.-]+$/', $value)) {
-			return 'match_value must be a valid domain substring.';
+
+		$ip = $parts[0];
+		$prefix = (int)$parts[1];
+		if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) !== false) {
+			return $prefix >= 0 && $prefix <= 32;
 		}
-		if ($type === 'protocol' && !preg_match('/^[A-Za-z0-9_.+-]+$/', $value)) {
-			return 'match_value must be a valid protocol name.';
+		if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6) !== false) {
+			return $prefix >= 0 && $prefix <= 128;
 		}
-		return '';
+		return false;
+	}
+
+	private function splitMatchValues(string $value): array
+	{
+		$parts = preg_split('/\r\n|\r|\n/', (string)$value) ?: [];
+		$values = [];
+		foreach ($parts as $part) {
+			$item = trim((string)$part);
+			if ($item !== '') {
+				$values[] = $item;
+			}
+		}
+		return $values;
+	}
+
+	private function normalizeImportedMatchValue($rawValue): string
+	{
+		if (is_array($rawValue)) {
+			$items = [];
+			foreach ($rawValue as $part) {
+				$value = trim((string)$part);
+				if ($value !== '') {
+					$items[] = $value;
+				}
+			}
+			return implode("\n", $items);
+		}
+
+		$value = str_replace(['\r\n', '\r'], "\n", (string)$rawValue);
+		if (strpos($value, '|') !== false) {
+			$items = [];
+			foreach (explode('|', $value) as $part) {
+				$item = trim((string)$part);
+				if ($item !== '') {
+					$items[] = $item;
+				}
+			}
+			return implode("\n", $items);
+		}
+
+		return implode("\n", $this->splitMatchValues($value));
 	}
 
 	private function ruleKeys(array $rules): array
@@ -379,7 +491,11 @@ class RuleController extends ApiMutableModelControllerBase
 
 	private function ruleKey(array $rule): string
 	{
-		return strtolower(trim((string)$rule['match_type'])) . "\n" . strtolower(trim((string)$rule['match_value']));
+		$values = [];
+		foreach ($this->splitMatchValues((string)($rule['match_value'] ?? '')) as $item) {
+			$values[] = strtolower($item);
+		}
+		return strtolower(trim((string)$rule['match_type'])) . "\n" . implode('|', $values);
 	}
 
 	private function exportRule(array $rule): array
@@ -392,7 +508,9 @@ class RuleController extends ApiMutableModelControllerBase
 		$handle = fopen('php://temp', 'r+');
 		fputcsv($handle, self::IMPORT_FIELDS);
 		foreach ($rules as $rule) {
-			fputcsv($handle, array_values($this->exportRule($rule)));
+			$exported = $this->exportRule($rule);
+			$exported['match_value'] = implode('|', $this->splitMatchValues((string)($exported['match_value'] ?? '')));
+			fputcsv($handle, array_values($exported));
 		}
 		rewind($handle);
 		$content = stream_get_contents($handle);
@@ -403,17 +521,17 @@ class RuleController extends ApiMutableModelControllerBase
 	private function csvTemplate(): string
 	{
 		return "enabled,description,match_type,match_value,app_label\n"
-			. "1,微信流量,domain,weixin.qq.com,微信\n"
-			. "1,QQ服务,domain,qq.com,QQ\n"
-			. "1,办公网段,cidr,10.10.0.0/16,内网办公\n"
+			. "1,微信流量,domain,weixin.qq.com|wechat.com|qpic.cn|gtimg.cn,微信\n"
+			. "1,抖音流量,domain,douyin.com|snssdk.com|byteimg.com|amemv.com,抖音\n"
+			. "1,办公网段,cidr,10.10.0.0/16|192.168.0.0/24,内网办公\n"
 			. "0,临时停用,port,8080,测试服务\n";
 	}
 
 	private function jsonTemplate(): string
 	{
 		return "[\n"
-			. "  {\"enabled\":\"1\",\"description\":\"微信流量\",\"match_type\":\"domain\",\"match_value\":\"weixin.qq.com\",\"app_label\":\"微信\"},\n"
-			. "  {\"enabled\":\"1\",\"description\":\"QQ服务\",\"match_type\":\"domain\",\"match_value\":\"qq.com\",\"app_label\":\"QQ\"}\n"
+			. "  {\"enabled\":\"1\",\"description\":\"微信流量\",\"match_type\":\"domain\",\"match_value\":[\"weixin.qq.com\",\"wechat.com\",\"qpic.cn\"],\"app_label\":\"微信\"},\n"
+			. "  {\"enabled\":\"1\",\"description\":\"抖音流量\",\"match_type\":\"domain\",\"match_value\":\"douyin.com|snssdk.com|byteimg.com\",\"app_label\":\"抖音\"}\n"
 			. "]\n";
 	}
 

@@ -643,10 +643,12 @@ class ApplicationsController extends GeneralController
 			if ((string)$rule->enabled !== '1') {
 				continue;
 			}
+			$rawMatchValue = trim((string)$rule->match_value);
 			$rules[] = [
 				'uuid' => (string)$uuid,
 				'match_type' => (string)$rule->match_type,
-				'match_value' => trim((string)$rule->match_value),
+				'match_value' => $rawMatchValue,
+				'match_values' => $this->splitMatchValues($rawMatchValue),
 				'app_label' => trim((string)$rule->app_label)
 			];
 		}
@@ -703,34 +705,52 @@ class ApplicationsController extends GeneralController
 		$protocol = strtolower((string)($flow['protocol']['l7'] ?? $flow['l7_proto'] ?? ''));
 
 		foreach ($rules as $rule) {
-			$value = trim((string)($rule['match_value'] ?? ''));
-			if ($value === '') {
+			$values = is_array($rule['match_values'] ?? null)
+				? $rule['match_values']
+				: $this->splitMatchValues((string)($rule['match_value'] ?? ''));
+			if (empty($values)) {
 				continue;
 			}
 			switch ((string)($rule['match_type'] ?? '')) {
 				case 'domain':
-					if ($serverName !== '' && strpos($serverName, strtolower($value)) !== false) {
-						return $rule;
+					if ($serverName !== '') {
+						foreach ($values as $value) {
+							if (strpos($serverName, strtolower((string)$value)) !== false) {
+								return $rule;
+							}
+						}
 					}
 					break;
 				case 'ip':
-					if ($serverIp === $value || $clientIp === $value) {
-						return $rule;
+					foreach ($values as $value) {
+						$item = (string)$value;
+						if ($serverIp === $item || $clientIp === $item) {
+							return $rule;
+						}
 					}
 					break;
 				case 'cidr':
-					if ($this->ipInCidr($serverIp, $value) || $this->ipInCidr($clientIp, $value)) {
-						return $rule;
+					foreach ($values as $value) {
+						$item = (string)$value;
+						if ($this->ipInCidr($serverIp, $item) || $this->ipInCidr($clientIp, $item)) {
+							return $rule;
+						}
 					}
 					break;
 				case 'port':
-					if ($serverPort === $value) {
-						return $rule;
+					foreach ($values as $value) {
+						if ($serverPort === (string)$value) {
+							return $rule;
+						}
 					}
 					break;
 				case 'protocol':
-					if ($protocol !== '' && strpos($protocol, strtolower($value)) !== false) {
-						return $rule;
+					if ($protocol !== '') {
+						foreach ($values as $value) {
+							if ($protocol === strtolower((string)$value)) {
+								return $rule;
+							}
+						}
 					}
 					break;
 			}
@@ -752,14 +772,64 @@ class ApplicationsController extends GeneralController
 		if (count($parts) !== 2 || !is_numeric($parts[1])) {
 			return false;
 		}
-		$ipLong = ip2long($ip);
-		$networkLong = ip2long($parts[0]);
-		$prefix = (int)$parts[1];
-		if ($ipLong === false || $networkLong === false || $prefix < 0 || $prefix > 32) {
-			return false;
+
+		if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) !== false && filter_var($parts[0], FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) !== false) {
+			$ipLong = ip2long($ip);
+			$networkLong = ip2long($parts[0]);
+			$prefix = (int)$parts[1];
+			if ($ipLong === false || $networkLong === false || $prefix < 0 || $prefix > 32) {
+				return false;
+			}
+			$mask = $prefix === 0 ? 0 : (-1 << (32 - $prefix));
+			return (($ipLong & $mask) === ($networkLong & $mask));
 		}
-		$mask = $prefix === 0 ? 0 : (-1 << (32 - $prefix));
-		return (($ipLong & $mask) === ($networkLong & $mask));
+
+		if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6) !== false && filter_var($parts[0], FILTER_VALIDATE_IP, FILTER_FLAG_IPV6) !== false) {
+			$prefix = (int)$parts[1];
+			if ($prefix < 0 || $prefix > 128) {
+				return false;
+			}
+
+			$ipBin = inet_pton($ip);
+			$networkBin = inet_pton($parts[0]);
+			if ($ipBin === false || $networkBin === false) {
+				return false;
+			}
+
+			$bytes = intdiv($prefix, 8);
+			$bits = $prefix % 8;
+			if ($bytes > 0 && substr($ipBin, 0, $bytes) !== substr($networkBin, 0, $bytes)) {
+				return false;
+			}
+			if ($bits === 0) {
+				return true;
+			}
+
+			$mask = (0xFF << (8 - $bits)) & 0xFF;
+			return ((ord($ipBin[$bytes]) & $mask) === (ord($networkBin[$bytes]) & $mask));
+		}
+
+		return false;
+	}
+
+	/**
+	 * Split stored multi-value field by line breaks and trim empty lines.
+	 *
+	 * @param string $raw
+	 * @return array
+	 */
+	private function splitMatchValues(string $raw): array
+	{
+		$parts = preg_split('/\r\n|\r|\n/', $raw) ?: [];
+		$values = [];
+		foreach ($parts as $part) {
+			$item = trim((string)$part);
+			if ($item !== '') {
+				$values[] = $item;
+			}
+		}
+
+		return $values;
 	}
 
 	/**

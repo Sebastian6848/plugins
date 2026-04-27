@@ -49,7 +49,7 @@ All rights reserved.
 					<th data-column-id="enabled" data-width="6em" data-type="string" data-formatter="rowtoggle">{{ lang._('启用') }}</th>
 					<th data-column-id="description" data-type="string">{{ lang._('描述') }}</th>
 					<th data-column-id="match_type" data-type="string">{{ lang._('匹配类型') }}</th>
-					<th data-column-id="match_value" data-type="string">{{ lang._('匹配值') }}</th>
+					<th data-column-id="match_value" data-type="string" data-formatter="matchvalues">{{ lang._('匹配值') }}</th>
 					<th data-column-id="app_label" data-type="string">{{ lang._('应用标签') }}</th>
 					<th data-column-id="uuid" data-type="string" data-identifier="true" data-visible="false">{{ lang._('ID') }}</th>
 					<th data-column-id="commands" data-width="7em" data-formatter="commands" data-sortable="false">{{ lang._('操作') }}</th>
@@ -77,6 +77,81 @@ All rights reserved.
 $(document).ready(function() {
 	function esc(value) {
 		return $('<div/>').text(value === null || value === undefined ? '' : String(value)).html();
+	}
+
+	function splitMatchValues(rawValue) {
+		if (Array.isArray(rawValue)) {
+			return rawValue.map(function (value) {
+				return $.trim(String(value || ''));
+			}).filter(function (value) {
+				return value !== '';
+			});
+		}
+
+		return String(rawValue || '').split(/\r?\n/).map(function (value) {
+			return $.trim(String(value || ''));
+		}).filter(function (value) {
+			return value !== '';
+		});
+	}
+
+	function normalizeImportMatchValue(rawValue) {
+		if (Array.isArray(rawValue)) {
+			return splitMatchValues(rawValue).join('\n');
+		}
+		const value = String(rawValue || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+		if (value.indexOf('|') !== -1) {
+			return value.split('|').map(function (item) {
+				return $.trim(item);
+			}).filter(function (item) {
+				return item !== '';
+			}).join('\n');
+		}
+		return splitMatchValues(value).join('\n');
+	}
+
+	function validateMatchValueLines(matchType, rawValue) {
+		const errors = [];
+		const lines = splitMatchValues(rawValue);
+		if (lines.length === 0) {
+			errors.push({line: 0, message: '{{ lang._('至少填写一个匹配值') }}'});
+			return errors;
+		}
+
+		for (let idx = 0; idx < lines.length; idx++) {
+			const lineNo = idx + 1;
+			const value = lines[idx];
+			if (matchType === 'domain') {
+				if (/\s/.test(value)) {
+					errors.push({line: lineNo, message: '{{ lang._('Domain 行不能包含空格') }}'});
+				}
+				continue;
+			}
+			if (matchType === 'ip') {
+				const isIp = /^\d{1,3}(?:\.\d{1,3}){3}$/.test(value) || /^[0-9a-fA-F:]+$/.test(value);
+				if (!isIp) {
+					errors.push({line: lineNo, message: '{{ lang._('IP 行格式不正确') }}'});
+				}
+				continue;
+			}
+			if (matchType === 'cidr') {
+				if (!/^([^\/\s]+)\/(\d{1,3})$/.test(value)) {
+					errors.push({line: lineNo, message: '{{ lang._('CIDR 行格式不正确') }}'});
+				}
+				continue;
+			}
+			if (matchType === 'port') {
+				if (!/^\d+$/.test(value) || Number(value) < 1 || Number(value) > 65535) {
+					errors.push({line: lineNo, message: '{{ lang._('Port 行必须是 1-65535') }}'});
+				}
+				continue;
+			}
+			if (matchType === 'protocol' && value === '') {
+				errors.push({line: lineNo, message: '{{ lang._('Protocol 行不能为空') }}'});
+			}
+		}
+
+		return errors;
 	}
 
 	function showApiError(title, message, retryFn) {
@@ -239,6 +314,79 @@ $(document).ready(function() {
 		});
 	}
 
+	function setupRuleDialogUi() {
+		const dialog = $('#DialogRule');
+		if (!dialog.length || dialog.data('multivalue-bound') === true) {
+			return;
+		}
+
+		dialog.data('multivalue-bound', true);
+		let debounceTimer = null;
+
+		function ensureValidationContainer() {
+			const field = $('#rule\\.match_value');
+			if (!field.length) {
+				return null;
+			}
+
+			field.attr('rows', '5');
+			field.attr('placeholder', '每行填写一个匹配值，例如：\nweixin.qq.com\nwechat.com\nqpic.cn');
+
+			let container = $('#rule-match-value-validation');
+			if (!container.length) {
+				container = $('<div id="rule-match-value-validation" style="margin-top:6px;"></div>');
+				field.closest('.form-group').append(container);
+			}
+			return container;
+		}
+
+		function validateDialogMatchValue() {
+			const field = $('#rule\\.match_value');
+			const typeField = $('#rule\\.match_type');
+			const container = ensureValidationContainer();
+			if (!field.length || !typeField.length || !container) {
+				return;
+			}
+
+			const errors = validateMatchValueLines(String(typeField.val() || ''), String(field.val() || ''));
+			const saveBtn = dialog.find('.modal-footer .btn-primary').first();
+			if (errors.length === 0) {
+				container.empty();
+				field.css('background-color', '');
+				saveBtn.prop('disabled', false);
+				return;
+			}
+
+			let html = '<div class="alert alert-danger" style="margin-bottom:0; padding:6px 10px;">';
+			html += '{{ lang._('以下匹配值行不合法：') }}<div style="margin-top:6px;">';
+			errors.forEach(function (err) {
+				html += '<div style="background:#fbe3e4; color:#a94442; padding:3px 6px; margin-bottom:4px; border-radius:2px;">';
+				html += '{{ lang._('第') }} ' + esc(err.line) + ' {{ lang._('行') }}: ' + esc(err.message);
+				html += '</div>';
+			});
+			html += '</div></div>';
+			container.html(html);
+			field.css('background-color', '#fff7f7');
+			saveBtn.prop('disabled', true);
+		}
+
+		function scheduleValidation() {
+			if (debounceTimer !== null) {
+				clearTimeout(debounceTimer);
+			}
+			debounceTimer = setTimeout(validateDialogMatchValue, 500);
+		}
+
+		dialog.on('shown.bs.modal opnsense_bootgrid_mapped', function () {
+			ensureValidationContainer();
+			scheduleValidation();
+		});
+
+		dialog.on('input change', '#rule\\.match_value, #rule\\.match_type', function () {
+			scheduleValidation();
+		});
+	}
+
 	const savedRuleRowCount = Number(window.localStorage.getItem('appidentification.rules.rowCount') || 25);
 	const ruleRowCounts = [savedRuleRowCount, 10, 25, 50, 100].filter(function (value, index, list) {
 		return value > 0 && list.indexOf(value) === index;
@@ -254,7 +402,26 @@ $(document).ready(function() {
 		options: {
 			selection: false,
 			multiSelect: false,
-			rowCount: ruleRowCounts
+			rowCount: ruleRowCounts,
+			formatters: {
+				matchvalues: function (column, row) {
+					const values = splitMatchValues(row.match_value);
+					if (values.length === 0) {
+						return '';
+					}
+
+					if (values.length === 1) {
+						return '<span class="bootgrid-tooltip" title="' + esc(values[0]) + '">' + esc(values[0]) + '</span>';
+					}
+
+					const title = values.map(function (item) { return esc(item); }).join('&#10;');
+					const extraCount = values.length - 1;
+					return '<span class="bootgrid-tooltip" title="' + title + '">' +
+						esc(values[0]) +
+						' <small class="text-muted">{{ lang._('等') }} ' + esc(extraCount) + ' {{ lang._('个') }}</small>' +
+						'</span>';
+				}
+			}
 		}
 	}).on('loaded.rs.jquery.bootgrid', function () {
 		const count = $('#grid-custom-rules').bootgrid('getRowCount');
@@ -262,6 +429,7 @@ $(document).ready(function() {
 			window.localStorage.setItem('appidentification.rules.rowCount', count);
 		}
 		bindRulesHeaderExportButton();
+		setupRuleDialogUi();
 		refreshRuleStats();
 	});
 
@@ -277,7 +445,12 @@ $(document).ready(function() {
 				if (!Array.isArray(parsed)) {
 					return {rows: [], errors: ['{{ lang._('JSON 顶层必须是数组') }}']};
 				}
-				rows = parsed;
+				rows = parsed.map(function (row) {
+					if (row && typeof row === 'object') {
+						row.match_value = normalizeImportMatchValue(row.match_value);
+					}
+					return row;
+				});
 			} catch (err) {
 				return {rows: [], errors: [err.message]};
 			}
@@ -318,6 +491,7 @@ $(document).ready(function() {
 				header.forEach(function (field, pos) {
 					row[field] = values[pos];
 				});
+				row.match_value = normalizeImportMatchValue(row.match_value);
 				rows.push(row);
 			});
 		}
@@ -344,7 +518,7 @@ $(document).ready(function() {
 		let html = '<div class="alert alert-success">{{ lang._('解析成功，共') }} ' + esc(result.rows.length) + ' {{ lang._('条') }}</div>';
 		html += '<table class="table table-condensed"><thead><tr><th>match_type</th><th>match_value</th><th>app_label</th></tr></thead><tbody>';
 		result.rows.slice(0, 5).forEach(function (row) {
-			html += '<tr><td>' + esc(row.match_type) + '</td><td>' + esc(row.match_value) + '</td><td>' + esc(row.app_label) + '</td></tr>';
+			html += '<tr><td>' + esc(row.match_type) + '</td><td><pre style="margin:0; border:0; padding:0; background:transparent;">' + esc(row.match_value) + '</pre></td><td>' + esc(row.app_label) + '</td></tr>';
 		});
 		html += '</tbody></table>';
 		container.find('#rules-import-preview').html(html);

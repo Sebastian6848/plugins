@@ -441,6 +441,22 @@ All rights reserved.
 			return (ipValue & mask) === (networkValue & mask);
 		}
 
+		function splitRuleMatchValues(rule) {
+			if (Array.isArray(rule.match_values)) {
+				return rule.match_values.map(function (item) {
+					return String(item || '').trim();
+				}).filter(function (item) {
+					return item !== '';
+				});
+			}
+
+			return String(rule.match_value || '').split(/\r?\n/).map(function (item) {
+				return String(item || '').trim();
+			}).filter(function (item) {
+				return item !== '';
+			});
+		}
+
 		function matchCustomRule(row) {
 			const serverName = String(row.server_name || '').toLowerCase();
 			const serverIp = String(row.server_ip || '');
@@ -451,25 +467,45 @@ All rights reserved.
 			for (let idx = 0; idx < customApplicationRules.length; idx++) {
 				const rule = customApplicationRules[idx] || {};
 				const type = String(rule.match_type || '');
-				const value = String(rule.match_value || '').trim();
-				if (value === '') {
+				const values = splitRuleMatchValues(rule);
+				if (values.length === 0) {
 					continue;
 				}
 
-				if (type === 'domain' && serverName.indexOf(value.toLowerCase()) !== -1) {
-					return rule;
+				if (type === 'domain') {
+					for (let i = 0; i < values.length; i++) {
+						if (serverName.indexOf(values[i].toLowerCase()) !== -1) {
+							return rule;
+						}
+					}
 				}
-				if (type === 'ip' && (serverIp === value || clientIp === value)) {
-					return rule;
+				if (type === 'ip') {
+					for (let i = 0; i < values.length; i++) {
+						if (serverIp === values[i] || clientIp === values[i]) {
+							return rule;
+						}
+					}
 				}
-				if (type === 'cidr' && (ipInCidr(serverIp, value) || ipInCidr(clientIp, value))) {
-					return rule;
+				if (type === 'cidr') {
+					for (let i = 0; i < values.length; i++) {
+						if (ipInCidr(serverIp, values[i]) || ipInCidr(clientIp, values[i])) {
+							return rule;
+						}
+					}
 				}
-				if (type === 'port' && serverPort === value) {
-					return rule;
+				if (type === 'port') {
+					for (let i = 0; i < values.length; i++) {
+						if (serverPort === values[i]) {
+							return rule;
+						}
+					}
 				}
-				if (type === 'protocol' && protocol.indexOf(value.toLowerCase()) !== -1) {
-					return rule;
+				if (type === 'protocol') {
+					for (let i = 0; i < values.length; i++) {
+						if (protocol === values[i].toLowerCase()) {
+							return rule;
+						}
+					}
 				}
 			}
 

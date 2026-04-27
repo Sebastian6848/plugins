@@ -25,8 +25,8 @@
     <field>
         <id>rule.match_value</id>
         <label>Match Value</label>
-        <type>text</type>
-        <help>Value to match, for example alicdn.com, 10.10.10.132, 10.10.10.0/24, or 443.</help>
+        <type>textarea</type>
+        <help>每行一个匹配值，命中任意一行即视为匹配。Domain 类型：填写域名子串，如 weixin.qq.com。IP 类型：每行一个 IP 地址。CIDR 类型：每行一个 CIDR 段，如 10.10.0.0/24。Port 类型：每行一个端口号。Protocol 类型：每行一个 L7 协议名，如 TLS.WeChat。</help>
     </field>
     <field>
         <id>rule.app_label</id>
