@@ -66,6 +66,10 @@ class FlowsController extends GeneralController
 
 			$records = [];
 			foreach ($this->extractFlowRecords($payload) as $record) {
+				if (!is_array($record) || !$this->isFlowRecord($record)) {
+					syslog(LOG_WARNING, 'AppIdentification: skipping malformed flow record in active flow response');
+					continue;
+				}
 				$records[] = $this->mapFlowRecord($record);
 			}
 
@@ -90,13 +94,14 @@ class FlowsController extends GeneralController
 				'current' => $current
 			];
 		} catch (\Throwable $e) {
+			syslog(LOG_ERR, 'AppIdentification: unable to search active flows: ' . $e->getMessage());
 			return [
 				'rows' => [],
 				'total' => 0,
 				'rowCount' => max(1, $this->requestInt('rowCount', 25)),
 				'current' => max(1, $this->requestInt('current', 1)),
 				'status' => 'error',
-				'message' => sprintf('Unable to search active flows: %s', $e->getMessage())
+				'message' => 'Unable to search active flows.'
 			];
 		}
 	}
@@ -264,7 +269,7 @@ class FlowsController extends GeneralController
 				return [$candidate];
 			}
 			if ($this->isRecordList($candidate)) {
-				return array_values($candidate);
+				return $this->filterFlowRecordList($candidate);
 			}
 		}
 
@@ -273,7 +278,7 @@ class FlowsController extends GeneralController
 		}
 
 		if ($this->isRecordList($payload)) {
-			return array_values($payload);
+			return $this->filterFlowRecordList($payload);
 		}
 
 		foreach ($payload as $value) {
@@ -284,10 +289,11 @@ class FlowsController extends GeneralController
 				return [$value];
 			}
 			if ($this->isRecordList($value)) {
-				return array_values($value);
+				return $this->filterFlowRecordList($value);
 			}
 		}
 
+		syslog(LOG_WARNING, 'AppIdentification: ntopng active flow response did not contain a flow record list');
 		return [];
 	}
 
@@ -308,6 +314,28 @@ class FlowsController extends GeneralController
 	}
 
 	/**
+	 * Keep only valid flow records from a candidate list.
+	 *
+	 * @param array $items
+	 * @return array
+	 */
+	private function filterFlowRecordList(array $items): array
+	{
+		$records = [];
+		foreach ($items as $item) {
+			if (is_array($item) && $this->isFlowRecord($item)) {
+				$records[] = $item;
+			}
+		}
+
+		if (empty($records) && !empty($items)) {
+			syslog(LOG_WARNING, 'AppIdentification: candidate flow list contained no valid flow records');
+		}
+
+		return $records;
+	}
+
+	/**
 	 * Check if an array looks like a list of flow records.
 	 *
 	 * @param array $items
@@ -320,7 +348,12 @@ class FlowsController extends GeneralController
 		}
 
 		$sample = reset($items);
-		return is_array($sample);
+		if (!is_array($sample)) {
+			return false;
+		}
+
+		return array_keys($items) === range(0, count($items) - 1)
+			|| $this->isFlowRecord($sample);
 	}
 
 	/**
@@ -331,6 +364,11 @@ class FlowsController extends GeneralController
 	 */
 	private function mapFlowRecord(array $record): array
 	{
+		if (!$this->isFlowRecord($record)) {
+			syslog(LOG_WARNING, 'AppIdentification: mapFlowRecord received malformed flow record');
+			$record = [];
+		}
+
 		$client = is_array($record['client'] ?? null) ? $record['client'] : [];
 		$server = is_array($record['server'] ?? null) ? $record['server'] : [];
 		$proto = is_array($record['protocol'] ?? null) ? $record['protocol'] : [];

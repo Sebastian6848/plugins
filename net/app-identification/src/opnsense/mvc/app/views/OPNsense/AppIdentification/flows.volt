@@ -888,7 +888,10 @@ All rights reserved.
 				},
 				responseHandler: function (data) {
 					if (data && data.status === 'error') {
-						showFlowRefreshStatus('error', data.message || "{{ lang._('刷新失败') }}");
+						const message = flowRefreshMode === 'auto'
+							? "{{ lang._('上次刷新失败，显示的是缓存数据') }}"
+							: (data.message || "{{ lang._('刷新失败') }}");
+						showFlowRefreshStatus('error', message);
 						if (lastGoodFlowResponse !== null) {
 							return $.extend(true, {}, lastGoodFlowResponse);
 						}
