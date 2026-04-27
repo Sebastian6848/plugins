@@ -118,27 +118,38 @@ class FlowsController extends GeneralController
 				];
 			}
 
-			$params = ['flow_key' => $flowKey];
-			$params['ifid'] = $this->getIfid();
+			$detail = null;
+			$params = [
+				'ifid' => $this->getIfid(),
+				'flow_key' => $flowKey,
+				'verbose' => 'true'
+			];
 			$payload = $this->proxyRequest('flow/data.lua', $params);
 
-			if (($payload['status'] ?? '') === 'error') {
-				$payload = $this->proxyRequest('flow/active.lua', $params);
+			if (($payload['status'] ?? '') !== 'error') {
+				$detail = $this->findFlowRecordByKey($this->extractFlowRecords($payload), $flowKey);
 			}
 
-			if (($payload['status'] ?? '') === 'error') {
-				return $payload;
+			if ($detail === null) {
+				$payload = $this->proxyRequest('flow/active.lua', [
+					'ifid' => $this->getIfid(),
+					'perPage' => 500,
+					'verbose' => 'true'
+				]);
+
+				if (($payload['status'] ?? '') === 'error') {
+					return $payload;
+				}
+
+				$detail = $this->findFlowRecordByKey($this->extractFlowRecords($payload), $flowKey);
 			}
 
-			$records = $this->extractFlowRecords($payload);
-			if (empty($records)) {
+			if ($detail === null) {
 				return [
 					'status' => 'error',
 					'message' => 'Flow key not provided or expired'
 				];
 			}
-
-			$detail = $records[0];
 
 			return [
 				'status' => 'ok',
@@ -291,7 +302,7 @@ class FlowsController extends GeneralController
 		$serverHost = $serverName !== '' ? $serverName : (string)($server['ip'] ?? '');
 
 		return [
-			'flow_key' => $record['key'] ?? $record['hash_id'] ?? '',
+			'flow_key' => $this->flowRecordKey($record),
 			'hash_id' => $record['hash_id'] ?? '',
 			'last_seen' => date('H:i:s', (int)($record['last_seen'] ?? time())),
 			'duration' => sprintf('%02d:%02d', intdiv($duration, 60), $duration % 60),
@@ -314,6 +325,60 @@ class FlowsController extends GeneralController
 			'is_blacklisted' => ($client['is_blacklisted'] ?? false) || ($server['is_blacklisted'] ?? false),
 			'info' => $l7
 		];
+	}
+
+	/**
+	 * Find a flow record by the opaque key exposed to the frontend.
+	 *
+	 * ntopng's active flow endpoint does not filter by flow_key, so callers
+	 * must match the requested row locally instead of falling back to the first
+	 * active flow.
+	 *
+	 * @param array $records
+	 * @param string $flowKey
+	 * @return array|null
+	 */
+	private function findFlowRecordByKey(array $records, string $flowKey): ?array
+	{
+		foreach ($records as $record) {
+			if (!is_array($record)) {
+				continue;
+			}
+
+			if ($this->flowRecordKey($record) === $flowKey) {
+				return $record;
+			}
+		}
+
+		return null;
+	}
+
+	/**
+	 * Build a stable frontend flow key from ntopng identifiers or endpoints.
+	 *
+	 * @param array $record
+	 * @return string
+	 */
+	private function flowRecordKey(array $record): string
+	{
+		foreach (['key', 'hash_id', 'flow_key'] as $field) {
+			if (isset($record[$field]) && trim((string)$record[$field]) !== '') {
+				return trim((string)$record[$field]);
+			}
+		}
+
+		$client = is_array($record['client'] ?? null) ? $record['client'] : [];
+		$server = is_array($record['server'] ?? null) ? $record['server'] : [];
+		$proto = is_array($record['protocol'] ?? null) ? $record['protocol'] : [];
+
+		return implode('|', [
+			(string)($client['ip'] ?? ''),
+			(string)($client['port'] ?? ''),
+			(string)($server['ip'] ?? ''),
+			(string)($server['port'] ?? ''),
+			(string)($proto['l4'] ?? ''),
+			(string)($proto['l7'] ?? '')
+		]);
 	}
 
 	/**
