@@ -40,14 +40,29 @@ class ServiceController extends ApiMutableServiceControllerBase
         return $this->runAction("eicar_test");
     }
 
+    public function eicar_testAction()
+    {
+        return $this->eicarTestAction();
+    }
+
     public function updateDbAction()
     {
         return $this->runAction("update_db");
     }
 
+    public function update_dbAction()
+    {
+        return $this->updateDbAction();
+    }
+
     public function parseLogsAction()
     {
         return $this->runAction("parse_logs");
+    }
+
+    public function parse_logsAction()
+    {
+        return $this->parseLogsAction();
     }
 
     public function dashboardAction()

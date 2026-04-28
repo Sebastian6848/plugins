@@ -16,6 +16,7 @@
                 <button class="btn" id="repairAct" type="button"><b>{{ lang._('Repair') }}</b> <i id="repairAct_progress"></i></button>
                 <button class="btn" id="updateDbAct" type="button"><b>{{ lang._('Update Database') }}</b> <i id="updateDbAct_progress"></i></button>
                 <button class="btn" id="eicarAct" type="button"><b>{{ lang._('Run EICAR Test') }}</b> <i id="eicarAct_progress"></i></button>
+                <div id="lastActionResult" class="text-muted" style="margin-top: 1em;"></div>
             </div>
         </div>
         <div class="content-box">
@@ -75,9 +76,23 @@ function spinner(id, active) {
 }
 
 function runService(action, icon, done) {
+    var endpoint = action;
+    var actionLabel = action;
+    if (action == "eicar_test") {
+        endpoint = "eicarTest";
+        actionLabel = "EICAR test";
+    } else if (action == "update_db") {
+        endpoint = "updateDb";
+        actionLabel = "database update";
+    } else if (action == "parse_logs") {
+        endpoint = "parseLogs";
+        actionLabel = "log parsing";
+    }
     spinner(icon, true);
-    ajaxCall(url="/api/antivirus/service/" + action, sendData={}, callback=function(data,status) {
+    $("#lastActionResult").text("Running " + actionLabel + "...");
+    ajaxCall(url="/api/antivirus/service/" + endpoint, sendData={}, callback=function(data,status) {
         spinner(icon, false);
+        $("#lastActionResult").text(actionLabel + ": " + JSON.stringify(data));
         updateStatus();
         updateDashboard();
         updateLogs();
