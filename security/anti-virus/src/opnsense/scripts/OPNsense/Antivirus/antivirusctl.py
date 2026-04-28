@@ -136,7 +136,7 @@ def start_or_reload_squid():
     if not valid:
         return 1, "", message
     if service_status("squid"):
-        return rc("reload", "squid")
+        return squid_reconfigure()
     pluginctl = "/usr/local/sbin/pluginctl"
     if os.path.exists(pluginctl):
         run([pluginctl, "-c", "webproxy", "start"], timeout=60)
@@ -152,7 +152,7 @@ def reload_squid_if_running():
         valid, message = squid_config_valid()
         if not valid:
             return 1, "", message
-        return rc("reload", "squid")
+        return squid_reconfigure()
     return 0, "", "squid is not running"
 
 
@@ -183,6 +183,16 @@ def squid_config_valid():
     if not any(pattern.lower() in output.lower() for pattern in fatal_patterns):
         return True, output
     return False, output
+
+
+def squid_reconfigure():
+    squid = "/usr/local/sbin/squid"
+    if not os.path.exists(squid):
+        return 1, "", "squid binary is not installed"
+    code, stdout, stderr = run([squid, "-k", "reconfigure"], timeout=60)
+    if code == 0:
+        return code, stdout, stderr
+    return rc("restart", "squid")
 
 
 def db_info():
