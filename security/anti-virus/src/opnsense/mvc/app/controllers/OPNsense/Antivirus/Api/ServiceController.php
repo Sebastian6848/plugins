@@ -57,14 +57,40 @@ class ServiceController extends ApiControllerBase
         return array("status" => "error");
     }
 
+    public function restartAction()
+    {
+        if ($this->request->isPost()) {
+            $backend = new Backend();
+            $response = trim($backend->configdRun("antivirus restart"));
+            return array("status" => $response);
+        }
+        return array("status" => "error");
+    }
+
+    public function reconfigureAction()
+    {
+        if ($this->request->isPost()) {
+            $backend = new Backend();
+            $response = trim($backend->configdRun("antivirus reload"));
+            return array("status" => $response);
+        }
+        return array("status" => "error");
+    }
+
     public function statusAction()
     {
         $backend = new Backend();
         $response = json_decode(trim($backend->configdRun("antivirus status")), true);
         if ($response != null) {
+            $response['status'] = ($response['clamd'] ?? '') == 'running' && ($response['cicap'] ?? '') == 'running' ? 'running' : 'stopped';
+            $response['widget'] = array(
+                'caption_start' => gettext('Start Antivirus'),
+                'caption_restart' => gettext('Restart Antivirus'),
+                'caption_stop' => gettext('Stop Antivirus')
+            );
             return $response;
         }
-        return array("clamd" => "stopped", "cicap" => "stopped");
+        return array("status" => "stopped", "clamd" => "stopped", "cicap" => "stopped");
     }
 
     /**

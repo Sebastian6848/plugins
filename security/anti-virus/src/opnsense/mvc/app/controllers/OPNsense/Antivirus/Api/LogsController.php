@@ -61,14 +61,98 @@ class LogsController extends ApiControllerBase
         }));
     }
 
+    private function requestParam(string $name, string $default = ''): string
+    {
+        $value = (string)$this->request->getPost($name, null, '');
+        if ($value === '') {
+            $value = (string)$this->request->getQuery($name, null, '');
+        }
+        return $value !== '' ? $value : $default;
+    }
+
+    private function severity(string $message): string
+    {
+        $payload = strtolower($message);
+        if (strpos($payload, 'virus detected') !== false || strpos($payload, 'infected') !== false) {
+            return 'alert';
+        } elseif (strpos($payload, 'error') !== false || strpos($payload, 'failed') !== false) {
+            return 'error';
+        } elseif (strpos($payload, 'warn') !== false) {
+            return 'warning';
+        }
+        return 'info';
+    }
+
+    private function sinceCutoff(string $since)
+    {
+        switch ($since) {
+            case '1h':
+                return strtotime('-1 hour');
+            case 'today':
+                return strtotime('today');
+            case 'yesterday':
+                return strtotime('yesterday');
+            case '7d':
+                return strtotime('-7 days');
+            default:
+                return null;
+        }
+    }
+
+    private function applyFilters(array $rows, string $mode): array
+    {
+        $severity = strtolower($this->requestParam('severity'));
+        $program = strtolower($this->requestParam('program'));
+        $action = strtolower($this->requestParam('action'));
+        $source = strtolower($this->requestParam('source'));
+        $since = $this->requestParam('since', 'all');
+        $cutoff = $this->sinceCutoff($since);
+        $until = $since === 'yesterday' ? strtotime('today') : null;
+
+        return array_values(array_filter($rows, function ($row) use ($mode, $severity, $program, $action, $source, $cutoff, $until) {
+            if (!isset($row['severity'])) {
+                $row['severity'] = $mode === 'blocked' ? 'alert' : $this->severity($row['message'] ?? '');
+            }
+            if ($severity !== '' && $severity !== 'all' && strtolower($row['severity']) !== $severity) {
+                return false;
+            }
+            if ($program !== '' && $program !== 'all' && strpos(strtolower($row['program'] ?? ''), $program) === false) {
+                return false;
+            }
+            if ($action !== '' && $action !== 'all' && strtolower($row['action'] ?? '') !== $action) {
+                return false;
+            }
+            if ($source !== '' && $source !== 'all' && strtolower($row['source'] ?? '') !== $source) {
+                return false;
+            }
+            if ($cutoff !== null && !empty($row['time'])) {
+                $timestamp = strtotime($row['time']);
+                if ($timestamp !== false && $timestamp < $cutoff) {
+                    return false;
+                }
+                if ($until !== null && $timestamp !== false && $timestamp >= $until) {
+                    return false;
+                }
+            }
+            return true;
+        }));
+    }
+
+    private function enrichRows(array $rows, string $mode): array
+    {
+        foreach ($rows as &$row) {
+            if (!isset($row['severity'])) {
+                $row['severity'] = $mode === 'blocked' ? 'alert' : $this->severity($row['message'] ?? '');
+            }
+        }
+        return $rows;
+    }
+
     private function respond(string $mode): array
     {
         $data = $this->loadLogs($mode);
         $rows = isset($data['rows']) && is_array($data['rows']) ? $data['rows'] : array();
-        $searchPhrase = (string)$this->request->getPost('searchPhrase', null, '');
-        if ($searchPhrase === '') {
-            $searchPhrase = (string)$this->request->getQuery('searchPhrase', null, '');
-        }
+        $searchPhrase = $this->requestParam('searchPhrase');
         $current = (int)$this->request->getPost('current', 'int', 1);
         if ($current < 1) {
             $current = (int)$this->request->getQuery('current', 'int', 1);
@@ -81,6 +165,8 @@ class LogsController extends ApiControllerBase
             }
         }
 
+        $rows = $this->enrichRows($rows, $mode);
+        $rows = $this->applyFilters($rows, $mode);
         $rows = $this->applySearch($rows, trim($searchPhrase));
         $total = count($rows);
 

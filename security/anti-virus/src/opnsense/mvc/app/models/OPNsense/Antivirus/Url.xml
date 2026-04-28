@@ -1,0 +1,23 @@
+<model>
+    <mount>//OPNsense/antivirus/url</mount>
+    <description>Antivirus signature URL configuration</description>
+    <version>1.0.0</version>
+    <items>
+        <lists>
+            <list type="ArrayField">
+                <enabled type="BooleanField">
+                    <Default>1</Default>
+                    <Required>Y</Required>
+                </enabled>
+                <name type="TextField">
+                    <Required>Y</Required>
+                </name>
+                <link type="TextField">
+                    <Required>Y</Required>
+                    <Mask>/^https?:\/\/.*$/i</Mask>
+                    <ValidationMessage>URL has to start with http:// or https://</ValidationMessage>
+                </link>
+            </list>
+        </lists>
+    </items>
+</model>

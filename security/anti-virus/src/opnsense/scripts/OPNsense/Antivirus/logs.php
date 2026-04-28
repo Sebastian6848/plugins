@@ -77,6 +77,9 @@ if (is_readable($logfile)) {
                 }
             } elseif (
                 strpos($payload, 'antivirus-c-icap') !== false ||
+                strpos($payload, 'c-icap') !== false ||
+                strpos($payload, 'clamd') !== false ||
+                strpos($payload, 'freshclam') !== false ||
                 strpos($payload, 'virus detected') !== false ||
                 strpos($payload, 'failed to scan web object') !== false ||
                 strpos($payload, 'clamd_scan') !== false ||

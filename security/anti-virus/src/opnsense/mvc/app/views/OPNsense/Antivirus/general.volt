@@ -34,6 +34,7 @@ POSSIBILITY OF SUCH DAMAGE.
 
 <ul class="nav nav-tabs" data-tabs="tabs" id="maintabs">
     <li class="active"><a data-toggle="tab" href="#general">{{ lang._('General') }}</a></li>
+    <li><a data-toggle="tab" href="#lists">{{ lang._('Signatures') }}</a></li>
     <li><a data-toggle="tab" href="#versions">{{ lang._('Versions') }}</a></li>
 </ul>
 
@@ -102,7 +103,36 @@ POSSIBILITY OF SUCH DAMAGE.
             </div>
         </div>
     </div>
+    <div id="lists" class="tab-pane fade in">
+        <table id="grid-lists" class="table table-responsive" data-editDialog="dialogEditAntivirusUrl">
+            <thead>
+                <tr>
+                    <th data-column-id="enabled" data-type="string" data-formatter="rowtoggle">{{ lang._('Enabled') }}</th>
+                    <th data-column-id="name" data-type="string" data-visible="true">{{ lang._('Name') }}</th>
+                    <th data-column-id="link" data-type="string" data-visible="true">{{ lang._('URL') }}</th>
+                    <th data-column-id="uuid" data-type="string" data-identifier="true" data-visible="false">{{ lang._('ID') }}</th>
+                    <th data-column-id="commands" data-formatter="commands" data-sortable="false">{{ lang._('Commands') }}</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+            <tfoot>
+                <tr>
+                    <td colspan="5"></td>
+                    <td>
+                        <button data-action="add" type="button" class="btn btn-xs btn-default"><span class="fa fa-plus"></span></button>
+                    </td>
+                </tr>
+            </tfoot>
+        </table>
+        <div class="col-md-12">
+            <hr />
+            <button class="btn btn-primary" id="saveAct_url" type="button"><b>{{ lang._('Save') }}</b> <i id="saveAct_url_progress"></i></button>
+            <br /><br />
+        </div>
+    </div>
 </div>
+
+{{ partial("layout_partials/base_dialog",['fields':formDialogEditAntivirusUrl,'id':'dialogEditAntivirusUrl','label':lang._('Edit Signature URLs')])}}
 
 <script>
 function timeoutCheck() {
@@ -149,6 +179,7 @@ function updateAntivirusStatus(data) {
 function refreshAntivirusStatus() {
     ajaxCall(url="/api/antivirus/service/status", sendData={}, callback=function(data,status) {
         updateAntivirusStatus(data);
+        updateServiceControlUI('antivirus');
     });
 }
 
@@ -164,6 +195,16 @@ $( document ).ready(function() {
         formatTokenizersUI();
         $('.selectpicker').selectpicker('refresh');
     });
+
+    $("#grid-lists").UIBootgrid(
+        {   'search':'/api/antivirus/url/search_url',
+            'get':'/api/antivirus/url/get_url/',
+            'set':'/api/antivirus/url/set_url/',
+            'add':'/api/antivirus/url/add_url/',
+            'del':'/api/antivirus/url/del_url/',
+            'toggle':'/api/antivirus/url/toggle_url/'
+        }
+    );
 
     refreshAntivirusStatus();
 
@@ -193,6 +234,14 @@ $( document ).ready(function() {
                 refreshAntivirusStatus();
                 $("#applyAct_progress").removeClass("fa fa-spinner fa-pulse");
             });
+        });
+    });
+
+    $("#saveAct_url").click(function(){
+        $("#saveAct_url_progress").addClass("fa fa-spinner fa-pulse");
+        ajaxCall(url="/api/antivirus/service/reconfigure", sendData={}, callback=function(data,status) {
+            refreshAntivirusStatus();
+            $("#saveAct_url_progress").removeClass("fa fa-spinner fa-pulse");
         });
     });
 
