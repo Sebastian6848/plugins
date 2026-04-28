@@ -11,10 +11,6 @@
             <Default>5M</Default>
             <Required>Y</Required>
         </max_scan_size>
-        <max_file_size type="TextField">
-            <Default>5M</Default>
-            <Required>Y</Required>
-        </max_file_size>
         <scan_options type="OptionField">
             <Multiple>Y</Multiple>
             <Default>pe,elf,ole2,pdf,swf,xmldocs,hwp3,mail,html,archive</Default>

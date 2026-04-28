@@ -12,12 +12,6 @@
         <help>Maximum ICAP object size to scan, for example 5M.</help>
     </field>
     <field>
-        <id>general.max_file_size</id>
-        <label>Max file size</label>
-        <type>text</type>
-        <help>Files larger than this limit won't be scanned.</help>
-    </field>
-    <field>
         <id>general.scan_options</id>
         <label>Scan engines/features</label>
         <type>select_multiple</type>

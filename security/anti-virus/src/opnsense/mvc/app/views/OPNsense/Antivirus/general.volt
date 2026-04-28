@@ -40,7 +40,9 @@ POSSIBILITY OF SUCH DAMAGE.
 <div class="tab-content content-box tab-content">
     <div id="general" class="tab-pane fade in active">
         <div class="content-box" style="padding-bottom: 1.5em;">
-            <h3>{{ lang._('Status') }}</h3>
+            <div class="table-responsive" style="padding: 8px 10px 0 10px;">
+                <strong>{{ lang._('Status') }}</strong>
+            </div>
             <div class="table-responsive">
                 <table class="table table-striped">
                     <tbody>
@@ -80,7 +82,9 @@ POSSIBILITY OF SUCH DAMAGE.
             </div>
         </div>
         <div class="content-box" style="padding-bottom: 1.5em;">
-            <h3>{{ lang._('Configuration') }}</h3>
+            <div class="table-responsive" style="padding: 8px 10px 0 10px;">
+                <strong>{{ lang._('Configuration') }}</strong>
+            </div>
             {{ partial("layout_partials/base_form",['fields':generalForm,'id':'frm_general_settings'])}}
             <div class="col-md-12">
                 <hr />
