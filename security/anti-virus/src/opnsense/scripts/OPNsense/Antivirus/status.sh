@@ -42,9 +42,16 @@ else
 	ssl_ca="missing"
 fi
 
-if command -v sigtool >/dev/null 2>&1 && [ -f /var/db/clamav/daily.cvd ]; then
-	sig_version=$(sigtool --info /var/db/clamav/daily.cvd 2>/dev/null | awk -F': ' '/^Version/ {print $2; exit}')
-	sig_updated=$(sigtool --info /var/db/clamav/daily.cvd 2>/dev/null | awk -F': ' '/^Build time/ {print $2; exit}')
+sig_db=""
+if [ -f /var/db/clamav/daily.cld ]; then
+	sig_db="/var/db/clamav/daily.cld"
+elif [ -f /var/db/clamav/daily.cvd ]; then
+	sig_db="/var/db/clamav/daily.cvd"
+fi
+
+if command -v sigtool >/dev/null 2>&1 && [ -n "${sig_db}" ]; then
+	sig_version=$(sigtool --info "${sig_db}" 2>/dev/null | awk -F': ' '/^Version/ {print $2; exit}')
+	sig_updated=$(sigtool --info "${sig_db}" 2>/dev/null | awk -F': ' '/^Build time/ {print $2; exit}')
 else
 	sig_version=""
 	sig_updated=""
