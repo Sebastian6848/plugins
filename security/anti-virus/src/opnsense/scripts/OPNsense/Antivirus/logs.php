@@ -50,6 +50,7 @@ function parse_blocked_event($entry)
     }
 
     return [
+        'uuid' => sha1($entry['raw']),
         'time' => $entry['time'],
         'client' => $client,
         'user' => $user,
@@ -83,6 +84,7 @@ if (is_readable($logfile)) {
                 strpos($payload, 'eicar') !== false
             ) {
                 $rows[] = [
+                    'uuid' => sha1($entry['raw']),
                     'time' => $entry['time'],
                     'program' => $entry['program'],
                     'message' => $entry['message']

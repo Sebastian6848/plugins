@@ -37,6 +37,7 @@ POSSIBILITY OF SUCH DAMAGE.
         <table id="grid-blocked" class="table table-responsive">
             <thead>
                 <tr>
+                    <th data-column-id="uuid" data-type="string" data-identifier="true" data-visible="false">{{ lang._('ID') }}</th>
                     <th data-column-id="time" data-type="string" data-width="180">{{ lang._('Time') }}</th>
                     <th data-column-id="client" data-type="string" data-width="140">{{ lang._('Client IP') }}</th>
                     <th data-column-id="user" data-type="string" data-width="100">{{ lang._('User') }}</th>
@@ -53,6 +54,7 @@ POSSIBILITY OF SUCH DAMAGE.
         <table id="grid-raw" class="table table-responsive">
             <thead>
                 <tr>
+                    <th data-column-id="uuid" data-type="string" data-identifier="true" data-visible="false">{{ lang._('ID') }}</th>
                     <th data-column-id="time" data-type="string" data-width="180">{{ lang._('Time') }}</th>
                     <th data-column-id="program" data-type="string" data-width="160">{{ lang._('Program') }}</th>
                     <th data-column-id="message" data-type="string">{{ lang._('Message') }}</th>
@@ -71,19 +73,17 @@ POSSIBILITY OF SUCH DAMAGE.
 
 <script>
 $( document ).ready(function() {
-    $("#grid-blocked").bootgrid({
-        ajax: true,
-        url: "/api/antivirus/logs/blocked",
-        rowCount: [10, 25, 50, 100],
-        formatters: {
+    $("#grid-blocked").UIBootgrid({
+        search: "/api/antivirus/logs/blocked",
+        options: {
+            rowCount: [10, 25, 50, 100]
         }
     });
 
-    $("#grid-raw").bootgrid({
-        ajax: true,
-        url: "/api/antivirus/logs/raw",
-        rowCount: [10, 25, 50, 100],
-        formatters: {
+    $("#grid-raw").UIBootgrid({
+        search: "/api/antivirus/logs/raw",
+        options: {
+            rowCount: [10, 25, 50, 100]
         }
     });
 

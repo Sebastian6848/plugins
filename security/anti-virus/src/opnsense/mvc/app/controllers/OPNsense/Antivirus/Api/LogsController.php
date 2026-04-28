@@ -66,8 +66,20 @@ class LogsController extends ApiControllerBase
         $data = $this->loadLogs($mode);
         $rows = isset($data['rows']) && is_array($data['rows']) ? $data['rows'] : array();
         $searchPhrase = (string)$this->request->getPost('searchPhrase', null, '');
+        if ($searchPhrase === '') {
+            $searchPhrase = (string)$this->request->getQuery('searchPhrase', null, '');
+        }
         $current = (int)$this->request->getPost('current', 'int', 1);
+        if ($current < 1) {
+            $current = (int)$this->request->getQuery('current', 'int', 1);
+        }
         $rowCount = (int)$this->request->getPost('rowCount', 'int', 25);
+        if ($rowCount === 25) {
+            $queryRowCount = $this->request->getQuery('rowCount', 'int', null);
+            if ($queryRowCount !== null) {
+                $rowCount = (int)$queryRowCount;
+            }
+        }
 
         $rows = $this->applySearch($rows, trim($searchPhrase));
         $total = count($rows);
