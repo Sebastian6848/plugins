@@ -11,5 +11,40 @@
             <Default>5M</Default>
             <Required>Y</Required>
         </max_scan_size>
+        <max_file_size type="TextField">
+            <Default>5M</Default>
+            <Required>Y</Required>
+        </max_file_size>
+        <scan_options type="OptionField">
+            <Multiple>Y</Multiple>
+            <Default>pe,elf,ole2,pdf,swf,xmldocs,hwp3,mail,html,archive</Default>
+            <OptionValues>
+                <pe>Portable executable files</pe>
+                <elf>Executable and linking format</elf>
+                <broken>Detect broken executables</broken>
+                <ole2>OLE2 documents</ole2>
+                <pdf>PDF files</pdf>
+                <swf>SWF files</swf>
+                <xmldocs>XML documents</xmldocs>
+                <hwp3>HWP3 files</hwp3>
+                <mail>Mail files</mail>
+                <html>HTML files</html>
+                <archive>Archive files</archive>
+                <encrypted_archive>Block encrypted archives</encrypted_archive>
+            </OptionValues>
+        </scan_options>
+        <scan_file_types type="OptionField">
+            <Multiple>Y</Multiple>
+            <Default>text,data,executable,archive,gif,jpeg,msoffice</Default>
+            <OptionValues>
+                <text>TEXT</text>
+                <data>DATA</data>
+                <executable>EXECUTABLE</executable>
+                <archive>ARCHIVE</archive>
+                <gif>GIF</gif>
+                <jpeg>JPEG</jpeg>
+                <msoffice>MSOFFICE</msoffice>
+            </OptionValues>
+        </scan_file_types>
     </items>
 </model>

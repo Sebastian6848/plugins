@@ -40,6 +40,7 @@ POSSIBILITY OF SUCH DAMAGE.
 <div class="tab-content content-box tab-content">
     <div id="general" class="tab-pane fade in active">
         <div class="content-box" style="padding-bottom: 1.5em;">
+            <h3>{{ lang._('Status') }}</h3>
             <div class="table-responsive">
                 <table class="table table-striped">
                     <tbody>
@@ -71,20 +72,15 @@ POSSIBILITY OF SUCH DAMAGE.
                             <td>{{ lang._('SSL CA') }}</td>
                             <td><span id="ssl_ca_status" class="label label-danger">{{ lang._('missing') }}</span></td>
                         </tr>
-                        <tr>
-                            <td>{{ lang._('Signature version') }}</td>
-                            <td><span id="sig_version">-</span></td>
-                        </tr>
-                        <tr>
-                            <td>{{ lang._('Signature updated') }}</td>
-                            <td><span id="sig_updated">-</span></td>
-                        </tr>
                     </tbody>
                 </table>
             </div>
             <div class="alert alert-info" role="alert" id="https_scan_hint" style="display:none;">
                 {{ lang._('HTTPS scanning uses the existing Squid SSL inspection configuration. Enable SSL inspection in the web proxy and install its CA certificate on clients to scan HTTPS response content.') }}
             </div>
+        </div>
+        <div class="content-box" style="padding-bottom: 1.5em;">
+            <h3>{{ lang._('Configuration') }}</h3>
             {{ partial("layout_partials/base_form",['fields':generalForm,'id':'frm_general_settings'])}}
             <div class="col-md-12">
                 <hr />
@@ -144,8 +140,6 @@ function updateAntivirusStatus(data) {
     } else {
         $("#https_scan_hint").hide();
     }
-    $("#sig_version").text(data['sig_version'] || '-');
-    $("#sig_updated").text(data['sig_updated'] || '-');
 }
 
 function refreshAntivirusStatus() {
