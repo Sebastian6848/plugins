@@ -1,7 +1,5 @@
-Industrial sidecar antivirus plugin for OPNsense.
+Unified antivirus management plugin for OPNsense.
 
-Design goals:
-- zero-latency forwarding (fail-open)
-- plaintext extraction only (HTTP/FTP/SMB)
-- asynchronous scan queue (ClamAV LocalSocket)
-- dynamic source blocking using PF table updates
+The plugin coordinates Squid, c-icap and ClamAV to scan web downloads through
+ICAP, exposes a single Services: Antivirus entry, provides status checks,
+EICAR self tests and normalized detection events.

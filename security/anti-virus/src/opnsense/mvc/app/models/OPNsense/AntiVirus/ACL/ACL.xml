@@ -1,9 +1,0 @@
-<acl>
-    <page-antivirus-user>
-        <name>Firewall: AntiVirus</name>
-        <patterns>
-            <pattern>ui/antivirus/*</pattern>
-            <pattern>api/antivirus/*</pattern>
-        </patterns>
-    </page-antivirus-user>
-</acl>

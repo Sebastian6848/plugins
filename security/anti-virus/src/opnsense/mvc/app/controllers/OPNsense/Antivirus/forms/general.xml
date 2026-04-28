@@ -1,0 +1,31 @@
+<form>
+    <field>
+        <id>antivirus.enabled</id>
+        <label>Enable Antivirus</label>
+        <type>checkbox</type>
+        <help>Enable ICAP response scanning through Squid, c-icap and ClamAV.</help>
+    </field>
+    <field>
+        <id>antivirus.mode</id>
+        <label>Proxy Mode</label>
+        <type>dropdown</type>
+        <help>Select the Squid traffic entry mode used by the deployment.</help>
+    </field>
+    <field>
+        <id>antivirus.scan_http</id>
+        <label>Scan HTTP Downloads</label>
+        <type>checkbox</type>
+    </field>
+    <field>
+        <id>antivirus.scan_https</id>
+        <label>Scan HTTPS Downloads</label>
+        <type>checkbox</type>
+        <help>HTTPS scanning requires Squid SSL inspection to be configured separately.</help>
+    </field>
+    <field>
+        <id>antivirus.bypass_on_failure</id>
+        <label>Fail Open</label>
+        <type>checkbox</type>
+        <help>Allow web traffic when the ICAP scanner is unavailable.</help>
+    </field>
+</form>

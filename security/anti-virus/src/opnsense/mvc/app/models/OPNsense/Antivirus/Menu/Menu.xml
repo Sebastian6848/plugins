@@ -1,0 +1,5 @@
+<menu>
+  <Services>
+    <Antivirus cssClass="fa fa-shield" url="/ui/antivirus/general/index" />
+  </Services>
+</menu>

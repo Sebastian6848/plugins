@@ -1,0 +1,57 @@
+<form>
+    <field>
+        <id>antivirus.max_scan_size_mb</id>
+        <label>Maximum Scan Size</label>
+        <type>text</type>
+        <help>Maximum object size in megabytes sent to ClamAV.</help>
+    </field>
+    <field>
+        <id>antivirus.oversize_action</id>
+        <label>Oversize Action</label>
+        <type>dropdown</type>
+    </field>
+    <field>
+        <id>antivirus.scan_archives</id>
+        <label>Scan Archives</label>
+        <type>checkbox</type>
+    </field>
+    <field>
+        <id>antivirus.scan_filetypes</id>
+        <label>Scan File Types</label>
+        <type>select_multiple</type>
+    </field>
+    <field>
+        <id>antivirus.whitelist_domains</id>
+        <label>Domain Whitelist</label>
+        <type>select_multiple</type>
+        <style>tokenize</style>
+    </field>
+    <field>
+        <id>antivirus.whitelist_client_ips</id>
+        <label>Client IP Whitelist</label>
+        <type>select_multiple</type>
+        <style>tokenize</style>
+    </field>
+    <field>
+        <id>antivirus.whitelist_mime_types</id>
+        <label>MIME Type Whitelist</label>
+        <type>select_multiple</type>
+        <style>tokenize</style>
+    </field>
+    <field>
+        <id>antivirus.freshclam_interval_hours</id>
+        <label>Virus Database Interval</label>
+        <type>text</type>
+        <help>Freshclam update checks per day are derived from this interval.</help>
+    </field>
+    <field>
+        <id>antivirus.log_retention_days</id>
+        <label>Log Retention</label>
+        <type>text</type>
+    </field>
+    <field>
+        <id>antivirus.alert_threshold_per_ip_1h</id>
+        <label>IP Alert Threshold</label>
+        <type>text</type>
+    </field>
+</form>

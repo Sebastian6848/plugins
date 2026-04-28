@@ -1,0 +1,6 @@
+{% if helpers.exists('OPNsense.antivirus.enabled') and OPNsense.antivirus.enabled == '1' %}
+clamav_clamd_setup="/usr/local/opnsense/scripts/OPNsense/Antivirus/setup.sh"
+clamav_clamd_enable="YES"
+{% else %}
+clamav_clamd_enable="NO"
+{% endif %}

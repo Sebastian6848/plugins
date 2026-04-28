@@ -1,0 +1,9 @@
+<acl>
+   <page-services-antivirus>
+      <name>Services: Antivirus</name>
+      <patterns>
+         <pattern>ui/antivirus/*</pattern>
+         <pattern>api/antivirus/*</pattern>
+      </patterns>
+   </page-services-antivirus>
+</acl>
