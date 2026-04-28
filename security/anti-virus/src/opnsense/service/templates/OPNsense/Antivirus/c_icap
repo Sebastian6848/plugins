@@ -1,0 +1,5 @@
+{% if helpers.exists('OPNsense.antivirus.general.enabled') and OPNsense.antivirus.general.enabled == '1' %}
+c_icap_enable="YES"
+{% else %}
+c_icap_enable="NO"
+{% endif %}
