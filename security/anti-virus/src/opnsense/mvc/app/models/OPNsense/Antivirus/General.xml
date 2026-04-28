@@ -1,0 +1,41 @@
+<model>
+    <mount>//OPNsense/antivirus/general</mount>
+    <description>Antivirus configuration</description>
+    <version>1.0.0</version>
+    <items>
+        <enabled type="BooleanField">
+            <Default>0</Default>
+            <Required>Y</Required>
+        </enabled>
+        <icap_port type="IntegerField">
+            <Default>1344</Default>
+            <Required>Y</Required>
+        </icap_port>
+        <icap_bypass_on_err type="BooleanField">
+            <Default>1</Default>
+            <Required>Y</Required>
+        </icap_bypass_on_err>
+        <max_scan_size type="TextField">
+            <Default>5M</Default>
+            <Required>Y</Required>
+        </max_scan_size>
+        <scan_archives type="BooleanField">
+            <Default>1</Default>
+        </scan_archives>
+        <scan_pe type="BooleanField">
+            <Default>1</Default>
+        </scan_pe>
+        <scan_pdf type="BooleanField">
+            <Default>1</Default>
+        </scan_pdf>
+        <freshclam_interval type="IntegerField">
+            <Default>4</Default>
+        </freshclam_interval>
+        <alert_threshold type="IntegerField">
+            <Default>5</Default>
+        </alert_threshold>
+        <log_retention_days type="IntegerField">
+            <Default>90</Default>
+        </log_retention_days>
+    </items>
+</model>

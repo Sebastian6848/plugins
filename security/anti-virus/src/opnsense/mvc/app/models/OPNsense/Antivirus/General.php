@@ -4,6 +4,6 @@ namespace OPNsense\Antivirus;
 
 use OPNsense\Base\BaseModel;
 
-class Antivirus extends BaseModel
+class General extends BaseModel
 {
 }

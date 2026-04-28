@@ -1,0 +1,129 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: OPNsense.Antivirus\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-04-28 00:00+0000\n"
+"PO-Revision-Date: 2026-04-28 00:00+0000\n"
+"Last-Translator: \n"
+"Language-Team: English\n"
+"Language: en_US\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+msgid "antivirus.general.title"
+msgstr "Antivirus"
+
+msgid "antivirus.general.enabled"
+msgstr "Enable Antivirus"
+
+msgid "antivirus.general.icap_port"
+msgstr "ICAP Port"
+
+msgid "antivirus.general.icap_bypass_on_err"
+msgstr "Bypass ICAP on Error"
+
+msgid "antivirus.general.max_scan_size"
+msgstr "Max Scan Size"
+
+msgid "antivirus.general.status_clamd"
+msgstr "ClamAV Engine"
+
+msgid "antivirus.general.status_cicap"
+msgstr "ICAP Service"
+
+msgid "antivirus.general.status_chain"
+msgstr "Proxy Chain"
+
+msgid "antivirus.general.sig_version"
+msgstr "Signature Version"
+
+msgid "antivirus.general.sig_updated"
+msgstr "Last Updated"
+
+msgid "antivirus.general.update_now"
+msgstr "Update Now"
+
+msgid "antivirus.general.start"
+msgstr "Start"
+
+msgid "antivirus.general.stop"
+msgstr "Stop"
+
+msgid "antivirus.general.restart"
+msgstr "Restart"
+
+msgid "antivirus.dashboard.title"
+msgstr "Threat Dashboard"
+
+msgid "antivirus.dashboard.last24h"
+msgstr "Threats Blocked (24h)"
+
+msgid "antivirus.dashboard.trend7d"
+msgstr "7-Day Trend"
+
+msgid "antivirus.dashboard.top_ips"
+msgstr "Top Source IPs"
+
+msgid "antivirus.dashboard.top_sigs"
+msgstr "Top Signatures"
+
+msgid "antivirus.log.title"
+msgstr "Detection Log"
+
+msgid "antivirus.log.col_ts"
+msgstr "Time"
+
+msgid "antivirus.log.col_src_ip"
+msgstr "Source IP"
+
+msgid "antivirus.log.col_url"
+msgstr "URL"
+
+msgid "antivirus.log.col_sig"
+msgstr "Signature"
+
+msgid "antivirus.log.col_action"
+msgstr "Action"
+
+msgid "antivirus.log.export"
+msgstr "Export CSV"
+
+msgid "antivirus.log.date_from"
+msgstr "From"
+
+msgid "antivirus.log.date_to"
+msgstr "To"
+
+msgid "antivirus.log.filter_ip"
+msgstr "Source IP"
+
+msgid "antivirus.log.filter_sig"
+msgstr "Signature Keyword"
+
+msgid "antivirus.advanced.title"
+msgstr "Advanced Settings"
+
+msgid "antivirus.advanced.scan_archives"
+msgstr "Scan Archives"
+
+msgid "antivirus.advanced.scan_pe"
+msgstr "Scan PE Executables"
+
+msgid "antivirus.advanced.scan_pdf"
+msgstr "Scan PDF Files"
+
+msgid "antivirus.advanced.freshclam_int"
+msgstr "Signature Update Interval (hours)"
+
+msgid "antivirus.advanced.alert_threshold"
+msgstr "Alert Threshold (detections/hour)"
+
+msgid "antivirus.advanced.log_retention"
+msgstr "Log Retention (days)"
+
+msgid "antivirus.advanced.ssl_bump_hint"
+msgstr "To scan HTTPS traffic, configure SSL Bump in Services > Web Proxy > Administration."
+
+msgid "antivirus.advanced.hw_req_hint"
+msgstr "Requires at least 2 GB RAM and 2 GB free disk space."

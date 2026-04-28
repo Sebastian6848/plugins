@@ -2,76 +2,59 @@
 
 namespace OPNsense\Antivirus\Api;
 
-use OPNsense\Base\ApiMutableServiceControllerBase;
+use OPNsense\Base\ApiControllerBase;
 use OPNsense\Core\Backend;
 
-class ServiceController extends ApiMutableServiceControllerBase
+class ServiceController extends ApiControllerBase
 {
-    protected static $internalServiceClass = '\OPNsense\Antivirus\Antivirus';
-    protected static $internalServiceTemplate = 'OPNsense/Antivirus';
-    protected static $internalServiceEnabled = 'enabled';
-    protected static $internalServiceName = 'antivirus';
-
-    private function runAction($action)
+    private function runCommand(string $command): array
     {
-        $backend = new Backend();
-        $response = $backend->configdRun("antivirus " . $action);
+        $response = trim((new Backend())->configdRun($command));
+        return ['status' => $response === '' ? 'ok' : $response];
+    }
+
+    public function startAction(): array
+    {
+        return $this->runCommand('antivirus start');
+    }
+
+    public function stopAction(): array
+    {
+        return $this->runCommand('antivirus stop');
+    }
+
+    public function restartAction(): array
+    {
+        return $this->runCommand('antivirus restart');
+    }
+
+    public function reloadAction(): array
+    {
+        return $this->runCommand('antivirus reload');
+    }
+
+    public function updateSigsAction(): array
+    {
+        return $this->runCommand('antivirus update_sigs');
+    }
+
+    public function statusAction(): array
+    {
+        $response = trim((new Backend())->configdRun('antivirus status'));
         $decoded = json_decode($response, true);
-        return is_array($decoded) ? $decoded : array("response" => $response);
-    }
 
-    public function applyAction()
-    {
-        return $this->runAction("apply");
-    }
+        if (is_array($decoded)) {
+            return $decoded;
+        }
 
-    public function repairAction()
-    {
-        return $this->runAction("repair");
-    }
-
-    public function statusAction()
-    {
-        return $this->runAction("status");
-    }
-
-    public function eicarTestAction()
-    {
-        return $this->runAction("eicar_test");
-    }
-
-    public function eicar_testAction()
-    {
-        return $this->eicarTestAction();
-    }
-
-    public function updateDbAction()
-    {
-        return $this->runAction("update_db");
-    }
-
-    public function update_dbAction()
-    {
-        return $this->updateDbAction();
-    }
-
-    public function parseLogsAction()
-    {
-        return $this->runAction("parse_logs");
-    }
-
-    public function parse_logsAction()
-    {
-        return $this->parseLogsAction();
-    }
-
-    public function dashboardAction()
-    {
-        return $this->runAction("dashboard");
-    }
-
-    public function logsAction()
-    {
-        return $this->runAction("logs");
+        return [
+            'clamd' => 'unknown',
+            'cicap' => 'unknown',
+            'squid_icap' => 'unknown',
+            'sig_version' => '',
+            'sig_updated' => '',
+            'freshclam' => 'unknown',
+            'raw' => $response,
+        ];
     }
 }

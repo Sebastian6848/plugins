@@ -1,5 +1,6 @@
-Unified antivirus management plugin for OPNsense.
+This plugin integrates Squid ICAP, c-icap, and ClamAV to provide antivirus
+inspection for web proxy traffic on OPNsense systems.
 
-The plugin coordinates Squid, c-icap and ClamAV to scan web downloads through
-ICAP, exposes a single Services: Antivirus entry, provides status checks,
-EICAR self tests and normalized detection events.
+The os-squid plugin must be installed and configured before using this plugin.
+Recommended minimum hardware requirements are at least 2GB RAM and at least
+2GB of available disk space.

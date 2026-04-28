@@ -1,8 +1,5 @@
-antivirus_squid_icap.conf:/usr/local/etc/squid/pre-auth/00-antivirus-icap.conf
 c-icap.conf:/usr/local/etc/c-icap/c-icap.conf
-virus_scan.conf:/usr/local/etc/c-icap/virus_scan.conf
+squidclamav.conf:/usr/local/etc/c-icap/squidclamav.conf
 clamd.conf:/usr/local/etc/clamd.conf
 freshclam.conf:/usr/local/etc/freshclam.conf
-clamav_clamd:/etc/rc.conf.d/clamav_clamd
-clamav_freshclam:/etc/rc.conf.d/clamav_freshclam
-c_icap:/etc/rc.conf.d/c_icap
+squid_icap_include.conf:/usr/local/etc/squid/post-auth/antivirus_icap.conf

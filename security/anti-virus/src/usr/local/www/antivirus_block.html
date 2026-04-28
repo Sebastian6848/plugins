@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title></title>
+    <style>
+        :root {
+            --page-bg: #f5f6f8;
+            --panel-bg: #ffffff;
+            --border: #d6d9dd;
+            --text: #222222;
+            --muted: #5f6872;
+            --accent: #c0392b;
+            --accent-dark: #922b21;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 32px 16px;
+            background: var(--page-bg);
+            color: var(--text);
+            font-family: Arial, Helvetica, sans-serif;
+            line-height: 1.45;
+        }
+
+        main {
+            width: 100%;
+            max-width: 760px;
+            background: var(--panel-bg);
+            border: 1px solid var(--border);
+            border-top: 6px solid var(--accent);
+            padding: 28px;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+        }
+
+        h1 {
+            margin: 0 0 12px;
+            color: var(--accent-dark);
+            font-size: 28px;
+            font-weight: 600;
+        }
+
+        p {
+            margin: 0 0 18px;
+            color: var(--muted);
+        }
+
+        dl {
+            margin: 0 0 24px;
+            border-top: 1px solid var(--border);
+        }
+
+        dt,
+        dd {
+            margin: 0;
+            padding: 12px 0;
+            border-bottom: 1px solid var(--border);
+        }
+
+        dt {
+            color: var(--muted);
+            font-weight: 600;
+        }
+
+        dd {
+            overflow-wrap: anywhere;
+        }
+
+        a {
+            display: inline-block;
+            color: #ffffff;
+            background: var(--accent);
+            padding: 9px 14px;
+            text-decoration: none;
+            border-radius: 3px;
+        }
+
+        a:hover,
+        a:focus {
+            background: var(--accent-dark);
+        }
+    </style>
+</head>
+<body>
+    <main>
+        <h1 id="title"></h1>
+        <p id="message"></p>
+        <dl>
+            <dt id="signature_label"></dt>
+            <dd id="signature"></dd>
+            <dt id="url_label"></dt>
+            <dd id="blocked_url"></dd>
+        </dl>
+        <a id="back_link" href="#"></a>
+    </main>
+
+    <script>
+        "use strict";
+
+        const I18N = {
+            title: "Virus Detected",
+            message: "Access to this resource was blocked by the antivirus scanner.",
+            signatureLabel: "Detected signature",
+            urlLabel: "Source URL",
+            unknown: "Unknown",
+            back: "Return to previous page"
+        };
+
+        const params = new URLSearchParams(window.location.search);
+
+        function text(id, value) {
+            document.getElementById(id).textContent = value || I18N.unknown;
+        }
+
+        document.title = I18N.title;
+        text("title", I18N.title);
+        text("message", I18N.message);
+        text("signature_label", I18N.signatureLabel);
+        text("signature", params.get("sig"));
+        text("url_label", I18N.urlLabel);
+        text("blocked_url", params.get("url"));
+
+        const backLink = document.getElementById("back_link");
+        backLink.textContent = I18N.back;
+        backLink.addEventListener("click", function(event) {
+            event.preventDefault();
+            history.back();
+        });
+    </script>
+</body>
+</html>

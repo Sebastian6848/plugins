@@ -1,0 +1,12 @@
+for lang in en_US zh_CN; do
+    po="/usr/local/opnsense/mvc/app/locale/${lang}/LC_MESSAGES/OPNsense.Antivirus.po"
+    mo="/usr/local/opnsense/mvc/app/locale/${lang}/LC_MESSAGES/OPNsense.Antivirus.mo"
+    if [ -f "${po}" ] && [ ! -f "${mo}" ] && command -v msgfmt >/dev/null 2>&1; then
+        msgfmt -o "${mo}" "${po}"
+    fi
+done
+
+/usr/local/sbin/pluginctl antivirus_install
+
+echo "Antivirus plugin installed."
+echo "Go to Services > Antivirus to complete configuration."

@@ -1,0 +1,28 @@
+#!/bin/sh
+#
+# PROVIDE: antivirus
+# REQUIRE: LOGIN clamav_clamd c-icap
+# KEYWORD: shutdown
+
+. /etc/rc.subr
+
+name="antivirus"
+rcvar="antivirus_enable"
+
+command="/usr/local/opnsense/scripts/OPNsense/Antivirus/start.sh"
+start_cmd="${command}"
+stop_cmd="/usr/local/opnsense/scripts/OPNsense/Antivirus/stop.sh"
+restart_cmd="antivirus_restart"
+status_cmd="/usr/local/opnsense/scripts/OPNsense/Antivirus/status.sh"
+
+load_rc_config ${name}
+
+: "${antivirus_enable="NO"}"
+
+antivirus_restart()
+{
+    ${stop_cmd} || :
+    ${start_cmd}
+}
+
+run_rc_command "$1"
