@@ -168,9 +168,21 @@ def squid_config_valid():
     if not os.path.exists(squid):
         return False, "squid binary is not installed"
     code, stdout, stderr = run([squid, "-k", "parse"], timeout=60)
+    output = (stdout + "\n" + stderr).strip()
     if code == 0:
-        return True, stdout
-    return False, stderr or stdout
+        return True, output
+    fatal_patterns = [
+        "FATAL:",
+        "Bungled",
+        "ERROR: Directive",
+        "ERROR: Invalid",
+        "ERROR: Unknown",
+        "Cannot open",
+        "not found",
+    ]
+    if not any(pattern.lower() in output.lower() for pattern in fatal_patterns):
+        return True, output
+    return False, output
 
 
 def db_info():
