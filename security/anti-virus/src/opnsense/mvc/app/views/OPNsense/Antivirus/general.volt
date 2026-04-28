@@ -60,6 +60,18 @@ POSSIBILITY OF SUCH DAMAGE.
                             <td><span id="squid_icap_status" class="label label-danger">{{ lang._('inactive') }}</span></td>
                         </tr>
                         <tr>
+                            <td>{{ lang._('SSL Inspection') }}</td>
+                            <td><span id="ssl_bump_status" class="label label-danger">{{ lang._('disabled') }}</span></td>
+                        </tr>
+                        <tr>
+                            <td>{{ lang._('SSL Mode') }}</td>
+                            <td><span id="ssl_mode">-</span></td>
+                        </tr>
+                        <tr>
+                            <td>{{ lang._('SSL CA') }}</td>
+                            <td><span id="ssl_ca_status" class="label label-danger">{{ lang._('missing') }}</span></td>
+                        </tr>
+                        <tr>
                             <td>{{ lang._('Signature version') }}</td>
                             <td><span id="sig_version">-</span></td>
                         </tr>
@@ -69,6 +81,9 @@ POSSIBILITY OF SUCH DAMAGE.
                         </tr>
                     </tbody>
                 </table>
+            </div>
+            <div class="alert alert-info" role="alert" id="https_scan_hint" style="display:none;">
+                {{ lang._('HTTPS scanning uses the existing Squid SSL inspection configuration. Enable SSL inspection in the web proxy and install its CA certificate on clients to scan HTTPS response content.') }}
             </div>
             {{ partial("layout_partials/base_form",['fields':generalForm,'id':'frm_general_settings'])}}
             <div class="col-md-12">
@@ -81,6 +96,10 @@ POSSIBILITY OF SUCH DAMAGE.
     <div id="versions" class="tab-pane fade in">
         <div class="content-box">
             {{ partial("layout_partials/base_form",['fields':versionForm,'id':'frm_version'])}}
+            <div class="col-md-12">
+                <hr />
+                <button class="btn btn-primary" id="update_sig" type="button"><b>{{ lang._('Download signatures') }}</b> <i id="update_sig_progress"></i></button>
+            </div>
         </div>
     </div>
 </div>
@@ -90,8 +109,16 @@ function timeoutCheck() {
     ajaxCall(url="/api/antivirus/service/freshclam", sendData={}, callback=function(data,status) {
         if (data['status'] == 'done') {
             $("#dl_sig_progress").removeClass("fa fa-spinner fa-pulse");
+            $("#update_sig_progress").removeClass("fa fa-spinner fa-pulse");
             $("#dl_sig").prop("disabled", false);
+            $("#update_sig").prop("disabled", false);
             $('#dl_sig_alert').hide();
+            var version_get_map = {'frm_version':"/api/antivirus/service/version"};
+            mapDataToFormUI(version_get_map).done(function(data){
+                formatTokenizersUI();
+                $('.selectpicker').selectpicker('refresh');
+            });
+            refreshAntivirusStatus();
         } else {
             setTimeout(timeoutCheck, 2500);
         }
@@ -103,10 +130,20 @@ function updateAntivirusStatus(data) {
     var cicap = data['cicap'] == 'running' ? 'running' : 'stopped';
     var freshclam = data['freshclam'] == 'running' ? 'running' : 'stopped';
     var squid_icap = data['squid_icap'] == 'active' ? 'active' : 'inactive';
+    var ssl_bump = data['ssl_bump'] == 'enabled' ? 'enabled' : 'disabled';
+    var ssl_ca = data['ssl_ca'] == 'present' ? 'present' : 'missing';
     $("#clamd_status").text(clamd).removeClass("label-success label-danger").addClass(clamd == 'running' ? "label-success" : "label-danger");
     $("#cicap_status").text(cicap).removeClass("label-success label-danger").addClass(cicap == 'running' ? "label-success" : "label-danger");
     $("#freshclam_status").text(freshclam).removeClass("label-success label-danger").addClass(freshclam == 'running' ? "label-success" : "label-danger");
     $("#squid_icap_status").text(squid_icap).removeClass("label-success label-danger").addClass(squid_icap == 'active' ? "label-success" : "label-danger");
+    $("#ssl_bump_status").text(ssl_bump).removeClass("label-success label-danger").addClass(ssl_bump == 'enabled' ? "label-success" : "label-danger");
+    $("#ssl_mode").text(data['ssl_mode'] == 'sni_only' ? 'SNI only' : 'inspection');
+    $("#ssl_ca_status").text(ssl_ca).removeClass("label-success label-danger").addClass(ssl_ca == 'present' ? "label-success" : "label-danger");
+    if (ssl_bump != 'enabled' || data['ssl_mode'] == 'sni_only' || ssl_ca != 'present') {
+        $("#https_scan_hint").show();
+    } else {
+        $("#https_scan_hint").hide();
+    }
     $("#sig_version").text(data['sig_version'] || '-');
     $("#sig_updated").text(data['sig_updated'] || '-');
 }
@@ -161,9 +198,11 @@ $( document ).ready(function() {
         });
     });
 
-    $("#dl_sig").click(function(){
+    $("#dl_sig, #update_sig").click(function(){
         $("#dl_sig_progress").addClass("fa fa-spinner fa-pulse");
+        $("#update_sig_progress").addClass("fa fa-spinner fa-pulse");
         $("#dl_sig").prop("disabled", true);
+        $("#update_sig").prop("disabled", true);
         ajaxCall(url="/api/antivirus/service/freshclam", sendData={action:1}, callback_ok=function(){
             setTimeout(timeoutCheck, 2500);
         });
