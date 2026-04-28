@@ -136,14 +136,22 @@ def start_or_reload_squid():
     if not valid:
         return 1, "", message
     if service_status("squid"):
-        return squid_reconfigure()
+        code, stdout, stderr = squid_reconfigure()
+        if code == 0 and tcp_ready("127.0.0.1", SQUID_TEST_PORT):
+            return code, stdout, stderr
+        rc("restart", "squid")
+        if wait_tcp("127.0.0.1", SQUID_TEST_PORT, 20):
+            return 0, stdout, stderr
+        return 1, stdout, stderr or "squid is running but antivirus test port is not listening"
     pluginctl = "/usr/local/sbin/pluginctl"
     if os.path.exists(pluginctl):
         run([pluginctl, "-c", "webproxy", "start"], timeout=60)
     code, stdout, stderr = rc("onestart", "squid")
     if code != 0:
-        return rc("start", "squid")
-    return code, stdout, stderr
+        code, stdout, stderr = rc("start", "squid")
+    if code == 0 and wait_tcp("127.0.0.1", SQUID_TEST_PORT, 20):
+        return code, stdout, stderr
+    return 1, stdout, stderr or "squid antivirus test port is not listening"
 
 
 def reload_squid_if_running():
@@ -154,6 +162,15 @@ def reload_squid_if_running():
             return 1, "", message
         return squid_reconfigure()
     return 0, "", "squid is not running"
+
+
+def wait_tcp(host, port, timeout):
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if tcp_ready(host, port, timeout=1):
+            return True
+        time.sleep(1)
+    return False
 
 
 def reload_proxy_templates():
@@ -512,6 +529,8 @@ def eicar_test():
     squid_result = start_or_reload_squid()
     if squid_result[0] != 0:
         return {"result": "failed_squid", "message": squid_result[2] or squid_result[1]}
+    if not tcp_ready("127.0.0.1", SQUID_TEST_PORT):
+        return {"result": "failed_squid", "message": "squid antivirus test port 127.0.0.1:%d is not listening" % SQUID_TEST_PORT}
     code, stdout, stderr = run(
         [curl, "-sS", "-m", "30", "-x", "http://127.0.0.1:%d" % SQUID_TEST_PORT, "-i", url],
         timeout=40,
