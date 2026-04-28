@@ -12,7 +12,7 @@ else
 	cicap="stopped"
 fi
 
-if grep -q "^icap_enable on" /usr/local/etc/squid/post-auth/antivirus_icap.conf 2>/dev/null; then
+if grep -q "^icap_service .*avscan" /usr/local/etc/squid/pre-auth/00-antivirus-icap.conf 2>/dev/null; then
 	squid_icap="active"
 else
 	squid_icap="inactive"

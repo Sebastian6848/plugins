@@ -47,19 +47,12 @@ function antivirus_configure_do($verbose = false)
     if ($verbose) {
         printf("template reload OPNsense/Antivirus: %s\n", trim($response));
     }
-
-    if (antivirus_enabled()) {
-        $response = configd_run('antivirus reload');
-        if ($verbose) {
-            printf("antivirus reload: %s\n", trim($response));
-        }
-    }
 }
 
 function antivirus_install()
 {
-    $path = '/usr/local/etc/squid/post-auth';
-    $filename = "{$path}/antivirus_icap.conf";
+    $path = '/usr/local/etc/squid/pre-auth';
+    $filename = "{$path}/00-antivirus-icap.conf";
 
     if (!is_dir($path)) {
         mkdir($path, 0755, true);

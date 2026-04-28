@@ -2,3 +2,4 @@
 
 /usr/local/opnsense/scripts/OPNsense/Antivirus/stop.sh
 rm -f /usr/local/etc/squid/post-auth/antivirus_icap.conf
+rm -f /usr/local/etc/squid/pre-auth/00-antivirus-icap.conf
