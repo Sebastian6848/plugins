@@ -27,8 +27,14 @@ POSSIBILITY OF SUCH DAMAGE.
 
 #}
 
+<div class="alert alert-warning" role="alert" id="dl_sig_alert" style="display:none;min-height:65px;">
+    <button class="btn btn-primary pull-right" id="dl_sig" type="button">{{ lang._('Download signatures') }} <i id="dl_sig_progress"></i></button>
+    <div style="margin-top: 8px;">{{ lang._('No signature database found, please download before use. The download will take several minutes and this message will disappear when it has been completed.') }}</div>
+</div>
+
 <ul class="nav nav-tabs" data-tabs="tabs" id="maintabs">
     <li class="active"><a data-toggle="tab" href="#general">{{ lang._('General') }}</a></li>
+    <li><a data-toggle="tab" href="#versions">{{ lang._('Versions') }}</a></li>
 </ul>
 
 <div class="tab-content content-box tab-content">
@@ -45,6 +51,22 @@ POSSIBILITY OF SUCH DAMAGE.
                             <td>{{ lang._('ICAP Service') }}</td>
                             <td><span id="cicap_status" class="label label-danger">{{ lang._('stopped') }}</span></td>
                         </tr>
+                        <tr>
+                            <td>{{ lang._('Freshclam Service') }}</td>
+                            <td><span id="freshclam_status" class="label label-danger">{{ lang._('stopped') }}</span></td>
+                        </tr>
+                        <tr>
+                            <td>{{ lang._('Squid ICAP') }}</td>
+                            <td><span id="squid_icap_status" class="label label-danger">{{ lang._('inactive') }}</span></td>
+                        </tr>
+                        <tr>
+                            <td>{{ lang._('Signature version') }}</td>
+                            <td><span id="sig_version">-</span></td>
+                        </tr>
+                        <tr>
+                            <td>{{ lang._('Signature updated') }}</td>
+                            <td><span id="sig_updated">-</span></td>
+                        </tr>
                     </tbody>
                 </table>
             </div>
@@ -56,14 +78,37 @@ POSSIBILITY OF SUCH DAMAGE.
             </div>
         </div>
     </div>
+    <div id="versions" class="tab-pane fade in">
+        <div class="content-box">
+            {{ partial("layout_partials/base_form",['fields':versionForm,'id':'frm_version'])}}
+        </div>
+    </div>
 </div>
 
 <script>
+function timeoutCheck() {
+    ajaxCall(url="/api/antivirus/service/freshclam", sendData={}, callback=function(data,status) {
+        if (data['status'] == 'done') {
+            $("#dl_sig_progress").removeClass("fa fa-spinner fa-pulse");
+            $("#dl_sig").prop("disabled", false);
+            $('#dl_sig_alert').hide();
+        } else {
+            setTimeout(timeoutCheck, 2500);
+        }
+    });
+}
+
 function updateAntivirusStatus(data) {
     var clamd = data['clamd'] == 'running' ? 'running' : 'stopped';
     var cicap = data['cicap'] == 'running' ? 'running' : 'stopped';
+    var freshclam = data['freshclam'] == 'running' ? 'running' : 'stopped';
+    var squid_icap = data['squid_icap'] == 'active' ? 'active' : 'inactive';
     $("#clamd_status").text(clamd).removeClass("label-success label-danger").addClass(clamd == 'running' ? "label-success" : "label-danger");
     $("#cicap_status").text(cicap).removeClass("label-success label-danger").addClass(cicap == 'running' ? "label-success" : "label-danger");
+    $("#freshclam_status").text(freshclam).removeClass("label-success label-danger").addClass(freshclam == 'running' ? "label-success" : "label-danger");
+    $("#squid_icap_status").text(squid_icap).removeClass("label-success label-danger").addClass(squid_icap == 'active' ? "label-success" : "label-danger");
+    $("#sig_version").text(data['sig_version'] || '-');
+    $("#sig_updated").text(data['sig_updated'] || '-');
 }
 
 function refreshAntivirusStatus() {
@@ -79,7 +124,24 @@ $( document ).ready(function() {
         $('.selectpicker').selectpicker('refresh');
     });
 
+    var version_get_map = {'frm_version':"/api/antivirus/service/version"};
+    mapDataToFormUI(version_get_map).done(function(data){
+        formatTokenizersUI();
+        $('.selectpicker').selectpicker('refresh');
+    });
+
     refreshAntivirusStatus();
+
+    ajaxCall(url="/api/antivirus/service/freshclam", sendData={}, callback=function(data,status) {
+        if (data['status'] != 'done') {
+            if (data['status'] == 'running') {
+                $("#dl_sig_progress").addClass("fa fa-spinner fa-pulse");
+                $("#dl_sig").prop("disabled", true);
+                setTimeout(timeoutCheck, 2500);
+            }
+            $('#dl_sig_alert').show();
+        }
+    });
 
     $("#saveAct").click(function(){
         saveFormToEndpoint(url="/api/antivirus/settings/set", formid='frm_general_settings', callback_ok=function(){
@@ -97,6 +159,21 @@ $( document ).ready(function() {
                 $("#applyAct_progress").removeClass("fa fa-spinner fa-pulse");
             });
         });
+    });
+
+    $("#dl_sig").click(function(){
+        $("#dl_sig_progress").addClass("fa fa-spinner fa-pulse");
+        $("#dl_sig").prop("disabled", true);
+        ajaxCall(url="/api/antivirus/service/freshclam", sendData={action:1}, callback_ok=function(){
+            setTimeout(timeoutCheck, 2500);
+        });
+    });
+
+    if(window.location.hash != "") {
+        $('a[href="' + window.location.hash + '"]').click()
+    }
+    $('.nav-tabs a').on('shown.bs.tab', function (e) {
+        history.pushState(null, null, e.target.hash);
     });
 });
 </script>

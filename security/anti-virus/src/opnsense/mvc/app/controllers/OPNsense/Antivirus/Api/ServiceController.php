@@ -66,4 +66,52 @@ class ServiceController extends ApiControllerBase
         }
         return array("clamd" => "stopped", "cicap" => "stopped");
     }
+
+    /**
+     * load the initial signatures
+     * @return array
+     */
+    public function freshclamAction()
+    {
+        if ($this->request->isPost()) {
+            $backend = new Backend();
+            $command = 'antivirus freshclam';
+            if ($this->request->hasPost('action')) {
+                $command .= ' go';
+            }
+            $response = trim($backend->configdRun($command));
+            return array('status' => $response);
+        } else {
+            return array('status' => 'error');
+        }
+    }
+
+    /**
+     * get ClamAV and signature versions
+     */
+    public function versionAction()
+    {
+        $infos = array(
+            "clamav" => array("Version"),
+            "main" => array("main.cvd", "main.cld"),
+            "daily" => array("daily.cvd", "daily.cld"),
+            "bytecode" => array("bytecode.cvd", "bytecode.cld"),
+            "signatures" => array("Total number of signatures")
+        );
+        $backend = new Backend();
+        $result = array();
+        $response = json_decode($backend->configdRun("antivirus version"));
+        if ($response != null) {
+            foreach ($response as $key => $value) {
+                foreach ($infos as $info_key => $info) {
+                    if (in_array($key, $info)) {
+                        $result[$info_key] = $value;
+                    }
+                }
+            }
+            return array("version" => $result);
+        } else {
+            return array();
+        }
+    }
 }
