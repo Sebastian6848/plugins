@@ -1,4 +1,2 @@
 c-icap.conf:/usr/local/etc/c-icap/c-icap.conf
-clamd.conf:/usr/local/etc/clamd.conf
-freshclam.conf:/usr/local/etc/freshclam.conf
 squid_icap_include.conf:/usr/local/etc/squid/post-auth/antivirus_icap.conf

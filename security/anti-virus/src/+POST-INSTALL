@@ -1,0 +1,3 @@
+#!/bin/sh
+
+/usr/local/bin/php -r 'require_once "/usr/local/etc/inc/plugins.inc.d/antivirus.inc"; antivirus_install();'

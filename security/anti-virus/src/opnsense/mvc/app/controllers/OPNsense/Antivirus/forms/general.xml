@@ -1,22 +1,14 @@
 <form>
     <field>
         <id>general.enabled</id>
-        <label>antivirus.general.enabled</label>
+        <label>Enable antivirus proxy</label>
         <type>checkbox</type>
-    </field>
-    <field>
-        <id>general.icap_port</id>
-        <label>antivirus.general.icap_port</label>
-        <type>text</type>
-    </field>
-    <field>
-        <id>general.icap_bypass_on_err</id>
-        <label>antivirus.general.icap_bypass_on_err</label>
-        <type>checkbox</type>
+        <help>This will activate the integrated c-icap and ClamAV proxy scanner.</help>
     </field>
     <field>
         <id>general.max_scan_size</id>
-        <label>antivirus.general.max_scan_size</label>
+        <label>Max scan size</label>
         <type>text</type>
+        <help>Maximum ICAP object size to scan, for example 5M.</help>
     </field>
 </form>

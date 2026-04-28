@@ -1,60 +1,69 @@
 <?php
 
+/*
+ * Copyright (C) 2026
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *
+ * 1. Redistributions of source code must retain the above copyright notice,
+ *    this list of conditions and the following disclaimer.
+ *
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES,
+ * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY
+ * AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
+ * AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY,
+ * OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
 namespace OPNsense\Antivirus\Api;
 
 use OPNsense\Base\ApiControllerBase;
 use OPNsense\Core\Backend;
 
+/**
+ * Class ServiceController
+ * @package OPNsense\Antivirus
+ */
 class ServiceController extends ApiControllerBase
 {
-    private function runCommand(string $command): array
+    public function startAction()
     {
-        $response = trim((new Backend())->configdRun($command));
-        return ['status' => $response === '' ? 'ok' : $response];
-    }
-
-    public function startAction(): array
-    {
-        return $this->runCommand('antivirus start');
-    }
-
-    public function stopAction(): array
-    {
-        return $this->runCommand('antivirus stop');
-    }
-
-    public function restartAction(): array
-    {
-        return $this->runCommand('antivirus restart');
-    }
-
-    public function reloadAction(): array
-    {
-        return $this->runCommand('antivirus reload');
-    }
-
-    public function updateSigsAction(): array
-    {
-        return $this->runCommand('antivirus update_sigs');
-    }
-
-    public function statusAction(): array
-    {
-        $response = trim((new Backend())->configdRun('antivirus status'));
-        $decoded = json_decode($response, true);
-
-        if (is_array($decoded)) {
-            return $decoded;
+        if ($this->request->isPost()) {
+            $backend = new Backend();
+            $response = trim($backend->configdRun("antivirus start"));
+            return array("status" => $response);
         }
+        return array("status" => "error");
+    }
 
-        return [
-            'clamd' => 'unknown',
-            'cicap' => 'unknown',
-            'squid_icap' => 'unknown',
-            'sig_version' => '',
-            'sig_updated' => '',
-            'freshclam' => 'unknown',
-            'raw' => $response,
-        ];
+    public function stopAction()
+    {
+        if ($this->request->isPost()) {
+            $backend = new Backend();
+            $response = trim($backend->configdRun("antivirus stop"));
+            return array("status" => $response);
+        }
+        return array("status" => "error");
+    }
+
+    public function statusAction()
+    {
+        $backend = new Backend();
+        $response = json_decode(trim($backend->configdRun("antivirus status")), true);
+        if ($response != null) {
+            return $response;
+        }
+        return array("clamd" => "stopped", "cicap" => "stopped");
     }
 }

@@ -1,6 +1,4 @@
-This plugin integrates Squid ICAP, c-icap, and ClamAV to provide antivirus
-inspection for web proxy traffic on OPNsense systems.
+Integrated antivirus proxy for OPNsense using Squid, c-icap and ClamAV.
 
-The os-squid plugin must be installed and configured before using this plugin.
-Recommended minimum hardware requirements are at least 2GB RAM and at least
-2GB of available disk space.
+This plugin renders a c-icap virus scanning service and a Squid ICAP include
+so proxied HTTP traffic can be scanned by ClamAV.

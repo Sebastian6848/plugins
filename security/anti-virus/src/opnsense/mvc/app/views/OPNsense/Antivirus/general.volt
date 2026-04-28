@@ -1,93 +1,102 @@
+{#
+
+OPNsense® is Copyright © 2014 – 2017 by Deciso B.V.
+This file is Copyright © 2026
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without modification,
+are permitted provided that the following conditions are met:
+
+1.  Redistributions of source code must retain the above copyright notice,
+    this list of conditions and the following disclaimer.
+
+2.  Redistributions in binary form must reproduce the above copyright notice,
+    this list of conditions and the following disclaimer in the documentation
+    and/or other materials provided with the distribution.
+
+THIS SOFTWARE IS PROVIDED “AS IS” AND ANY EXPRESS OR IMPLIED WARRANTIES,
+INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY
+AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
+AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY,
+OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+POSSIBILITY OF SUCH DAMAGE.
+
+#}
+
+<ul class="nav nav-tabs" data-tabs="tabs" id="maintabs">
+    <li class="active"><a data-toggle="tab" href="#general">{{ lang._('General') }}</a></li>
+</ul>
+
+<div class="tab-content content-box tab-content">
+    <div id="general" class="tab-pane fade in active">
+        <div class="content-box" style="padding-bottom: 1.5em;">
+            <div class="table-responsive">
+                <table class="table table-striped">
+                    <tbody>
+                        <tr>
+                            <td>{{ lang._('ClamAV Engine') }}</td>
+                            <td><span id="clamd_status" class="label label-danger">{{ lang._('stopped') }}</span></td>
+                        </tr>
+                        <tr>
+                            <td>{{ lang._('ICAP Service') }}</td>
+                            <td><span id="cicap_status" class="label label-danger">{{ lang._('stopped') }}</span></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            {{ partial("layout_partials/base_form",['fields':generalForm,'id':'frm_general_settings'])}}
+            <div class="col-md-12">
+                <hr />
+                <button class="btn btn-primary" id="saveAct" type="button"><b>{{ lang._('Save') }}</b> <i id="saveAct_progress"></i></button>
+                <button class="btn btn-primary" id="applyAct" type="button"><b>{{ lang._('Apply') }}</b> <i id="applyAct_progress"></i></button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
-    "use strict";
+function updateAntivirusStatus(data) {
+    var clamd = data['clamd'] == 'running' ? 'running' : 'stopped';
+    var cicap = data['cicap'] == 'running' ? 'running' : 'stopped';
+    $("#clamd_status").text(clamd).removeClass("label-success label-danger").addClass(clamd == 'running' ? "label-success" : "label-danger");
+    $("#cicap_status").text(cicap).removeClass("label-success label-danger").addClass(cicap == 'running' ? "label-success" : "label-danger");
+}
 
-    function antivirusStatusClass(value) {
-        if (value === "running" || value === "active") {
-            return "text-success fa-check-circle";
-        }
-        if (value === "stopped" || value === "inactive") {
-            return "text-danger fa-times-circle";
-        }
-        return "text-muted fa-question-circle";
-    }
-
-    function updateAntivirusStatus() {
-        ajaxCall(url="/api/antivirus/service/status", sendData={}, callback=function(data, status) {
-            ["clamd", "cicap", "squid_icap"].forEach(function(item) {
-                $("#status_" + item)
-                    .removeClass("text-success text-danger text-muted fa-check-circle fa-times-circle fa-question-circle")
-                    .addClass(antivirusStatusClass(data[item]));
-                $("#status_" + item + "_value").text(data[item] || "-");
-            });
-            $("#sig_version").text(data["sig_version"] || "-");
-            $("#sig_updated").text(data["sig_updated"] || "-");
-        });
-    }
-
-    $(document).ready(function() {
-        mapDataToFormUI({'frm_general_settings': "/api/antivirus/settings/get"}).done(function() {
-            formatTokenizersUI();
-            $('.selectpicker').selectpicker('refresh');
-        });
-
-        $("#saveAct").click(function() {
-            saveFormToEndpoint("/api/antivirus/settings/set", "frm_general_settings", function() {
-                $("#saveAct_progress").addClass("fa fa-spinner fa-pulse");
-                ajaxCall(url="/api/antivirus/service/reload", sendData={}, callback=function() {
-                    $("#saveAct_progress").removeClass("fa fa-spinner fa-pulse");
-                    updateAntivirusStatus();
-                });
-            });
-        });
-
-        $("#startAct, #stopAct, #restartAct, #updateSigsAct").SimpleActionButton({
-            onAction: function() {
-                updateAntivirusStatus();
-            }
-        });
-
-        updateAntivirusStatus();
+function refreshAntivirusStatus() {
+    ajaxCall(url="/api/antivirus/service/status", sendData={}, callback=function(data,status) {
+        updateAntivirusStatus(data);
     });
+}
+
+$( document ).ready(function() {
+    var data_get_map = {'frm_general_settings':"/api/antivirus/settings/get"};
+    mapDataToFormUI(data_get_map).done(function(data){
+        formatTokenizersUI();
+        $('.selectpicker').selectpicker('refresh');
+    });
+
+    refreshAntivirusStatus();
+
+    $("#saveAct").click(function(){
+        saveFormToEndpoint(url="/api/antivirus/settings/set", formid='frm_general_settings', callback_ok=function(){
+            $("#saveAct_progress").addClass("fa fa-spinner fa-pulse");
+            $("#saveAct_progress").removeClass("fa fa-spinner fa-pulse");
+        });
+    });
+
+    $("#applyAct").click(function(){
+        saveFormToEndpoint(url="/api/antivirus/settings/set", formid='frm_general_settings', callback_ok=function(){
+            $("#applyAct_progress").addClass("fa fa-spinner fa-pulse");
+            var endpoint = $("#general\\.enabled").is(":checked") ? "/api/antivirus/service/start" : "/api/antivirus/service/stop";
+            ajaxCall(url=endpoint, sendData={}, callback=function(data,status) {
+                refreshAntivirusStatus();
+                $("#applyAct_progress").removeClass("fa fa-spinner fa-pulse");
+            });
+        });
+    });
+});
 </script>
-
-<div class="content-box">
-    <div class="row">
-        <div class="col-md-4">
-            <h3>{{ lang._('antivirus.general.status_clamd') }}</h3>
-            <p><span id="status_clamd" class="fa text-muted fa-question-circle"></span> <span id="status_clamd_value">-</span></p>
-        </div>
-        <div class="col-md-4">
-            <h3>{{ lang._('antivirus.general.status_cicap') }}</h3>
-            <p><span id="status_cicap" class="fa text-muted fa-question-circle"></span> <span id="status_cicap_value">-</span></p>
-        </div>
-        <div class="col-md-4">
-            <h3>{{ lang._('antivirus.general.status_chain') }}</h3>
-            <p><span id="status_squid_icap" class="fa text-muted fa-question-circle"></span> <span id="status_squid_icap_value">-</span></p>
-        </div>
-    </div>
-    <hr />
-    <div class="row">
-        <div class="col-md-4">
-            <strong>{{ lang._('antivirus.general.sig_version') }}</strong>
-            <p id="sig_version">-</p>
-        </div>
-        <div class="col-md-4">
-            <strong>{{ lang._('antivirus.general.sig_updated') }}</strong>
-            <p id="sig_updated">-</p>
-        </div>
-        <div class="col-md-4">
-            <button class="btn btn-primary" id="updateSigsAct" data-endpoint="/api/antivirus/service/update_sigs" data-label="{{ lang._('antivirus.general.update_now') }}"></button>
-        </div>
-    </div>
-</div>
-
-<div class="content-box">
-    {{ partial("layout_partials/base_form", ['fields': generalForm, 'id': 'frm_general_settings']) }}
-    <div class="col-md-12">
-        <hr />
-        <button class="btn btn-primary" id="saveAct" type="button"><b>{{ lang._('Save') }}</b> <i id="saveAct_progress"></i></button>
-        <button class="btn btn-default" id="startAct" data-endpoint="/api/antivirus/service/start" data-label="{{ lang._('antivirus.general.start') }}"></button>
-        <button class="btn btn-default" id="stopAct" data-endpoint="/api/antivirus/service/stop" data-label="{{ lang._('antivirus.general.stop') }}"></button>
-        <button class="btn btn-default" id="restartAct" data-endpoint="/api/antivirus/service/restart" data-label="{{ lang._('antivirus.general.restart') }}"></button>
-    </div>
-</div>

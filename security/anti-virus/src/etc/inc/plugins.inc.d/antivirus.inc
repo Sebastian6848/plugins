@@ -1,88 +1,54 @@
 <?php
 
+/*
+    Copyright (C) 2026
+    All rights reserved.
+
+    Redistribution and use in source and binary forms, with or without
+    modification, are permitted provided that the following conditions are met:
+
+    1. Redistributions of source code must retain the above copyright notice,
+       this list of conditions and the following disclaimer.
+
+    2. Redistributions in binary form must reproduce the above copyright
+       notice, this list of conditions and the following disclaimer in the
+       documentation and/or other materials provided with the distribution.
+
+    THIS SOFTWARE IS PROVIDED ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES,
+    INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY
+    AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
+    AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY,
+    OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+    SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+    INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+    CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+    ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+    POSSIBILITY OF SUCH DAMAGE.
+*/
+
 function antivirus_enabled()
 {
     global $config;
 
-    return !empty($config['OPNsense']['antivirus']['general']['enabled']) &&
-        (string)$config['OPNsense']['antivirus']['general']['enabled'] === '1';
-}
-
-function antivirus_services()
-{
-    $services = array();
-
-    if (antivirus_enabled()) {
-        $services[] = array(
-            'description' => gettext('Antivirus proxy scanner'),
-            'configd' => array(
-                'restart' => array('antivirus restart'),
-                'start' => array('antivirus start'),
-                'stop' => array('antivirus stop'),
-            ),
-            'name' => 'antivirus',
-            'pidfile' => '/var/run/c-icap/c-icap.pid'
-        );
-    }
-
-    return $services;
+    return isset($config['OPNsense']['antivirus']['general']['enabled']) &&
+        $config['OPNsense']['antivirus']['general']['enabled'] == 1;
 }
 
 function antivirus_configure()
 {
-    return array(
-        'antivirus' => array('antivirus_reload'),
-        'newwanip' => array('antivirus_reload'),
-        'interface' => array('antivirus_reload'),
-        'antivirus_install' => array('antivirus_install'),
-        'antivirus_uninstall' => array('antivirus_uninstall'),
-    );
+    mwexec('/usr/local/sbin/configctl template reload OPNsense/Antivirus');
+    mwexec('/usr/local/sbin/configctl antivirus reload');
 }
 
-function antivirus_reload($verbose = false)
+function antivirus_install()
 {
-    configd_run('template reload OPNsense/Antivirus');
-    configd_run('antivirus reload');
-}
+    $path = '/usr/local/etc/squid/post-auth';
+    $filename = "{$path}/antivirus_icap.conf";
 
-function antivirus_install($verbose = false)
-{
-    mwexecf('/usr/local/opnsense/scripts/OPNsense/Antivirus/db_init.py');
-    mwexecf('/bin/mkdir -p %s', '/var/log/c-icap');
-    mwexecf('/bin/mkdir -p %s', '/var/db/antivirus');
-    mwexecf('/bin/chmod 750 %s', '/var/db/antivirus');
-    mwexecf('/bin/chmod 755 %s', '/var/log/c-icap');
-    mwexecf('/usr/sbin/chown -R c_icap:c_icap %s', '/var/log/c-icap');
-
-    if (mwexecf('/usr/sbin/pkg info -e %s', 'os-squid') != 0) {
-        log_error('Antivirus plugin installed, but os-squid is not installed.');
+    if (!is_dir($path)) {
+        mkdir($path, 0755, true);
     }
-
-    if (mwexecf('/usr/sbin/pkg info -e %s', 'os-clamav') == 0) {
-        log_error('Antivirus plugin conflict warning: os-clamav is installed.');
-    }
-
-    if (mwexecf('/usr/sbin/pkg info -e %s', 'os-c-icap') == 0) {
-        log_error('Antivirus plugin conflict warning: os-c-icap is installed and may overwrite c-icap.conf.');
-    }
-
-    configd_run('template reload OPNsense/Antivirus');
-}
-
-function antivirus_uninstall($verbose = false)
-{
-    global $config;
-
-    mwexecf('/usr/local/opnsense/scripts/OPNsense/Antivirus/stop.sh');
-    mwexecf('/bin/mkdir -p %s', '/usr/local/etc/squid/post-auth');
-    file_put_contents('/usr/local/etc/squid/post-auth/antivirus_icap.conf', '');
-    configd_run('proxy restart');
-    mwexecf('/bin/rm -rf %s', '/var/db/antivirus');
-    mwexecf('/bin/rm -f %s', '/var/log/c-icap/access.log');
-    mwexecf('/bin/rm -f %s', '/var/log/c-icap/server.log');
-
-    if (isset($config['OPNsense']['antivirus'])) {
-        unset($config['OPNsense']['antivirus']);
-        write_config('Removed antivirus plugin configuration');
+    if (!file_exists($filename)) {
+        touch($filename);
     }
 }

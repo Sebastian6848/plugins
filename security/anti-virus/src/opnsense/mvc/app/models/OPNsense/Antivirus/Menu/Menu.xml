@@ -1,10 +1,7 @@
 <menu>
     <Services>
-        <Antivirus cssClass="fa fa-shield">
-            <General order="10" url="/ui/antivirus/general"/>
-            <Dashboard order="20" url="/ui/antivirus/dashboard"/>
-            <Logs order="30" url="/ui/antivirus/log"/>
-            <Advanced order="40" url="/ui/antivirus/advanced"/>
+        <Antivirus cssClass="fa fa-stethoscope">
+            <Configuration order="10" url="/ui/antivirus/general/index"/>
         </Antivirus>
     </Services>
 </menu>
