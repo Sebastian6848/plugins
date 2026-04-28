@@ -17,6 +17,7 @@ import xml.etree.ElementTree as ET
 DB_PATH = "/var/db/opnsense-antivirus/events.sqlite"
 STATE_PATH = "/var/db/opnsense-antivirus/parser_state.json"
 SQUID_ICAP_PATH = "/usr/local/etc/squid/pre-auth/00-antivirus-icap.conf"
+SQUID_TEST_PORT = 31289
 CONFIG_XML = "/conf/config.xml"
 LOG_SOURCES = {
     "cicap": [
@@ -130,18 +131,46 @@ def package_installed_any(*pkg_names):
 
 
 def start_or_reload_squid():
+    reload_proxy_templates()
+    valid, message = squid_config_valid()
+    if not valid:
+        return 1, "", message
     if service_status("squid"):
         return rc("reload", "squid")
     pluginctl = "/usr/local/sbin/pluginctl"
     if os.path.exists(pluginctl):
         run([pluginctl, "-c", "webproxy", "start"], timeout=60)
-    return rc("start", "squid")
+    code, stdout, stderr = rc("onestart", "squid")
+    if code != 0:
+        return rc("start", "squid")
+    return code, stdout, stderr
 
 
 def reload_squid_if_running():
     if service_status("squid"):
+        reload_proxy_templates()
+        valid, message = squid_config_valid()
+        if not valid:
+            return 1, "", message
         return rc("reload", "squid")
     return 0, "", "squid is not running"
+
+
+def reload_proxy_templates():
+    configctl = "/usr/local/sbin/configctl"
+    if os.path.exists(configctl):
+        return run([configctl, "template", "reload", "OPNsense/Proxy"], timeout=120)
+    return 1, "", "configctl is not installed"
+
+
+def squid_config_valid():
+    squid = "/usr/local/sbin/squid"
+    if not os.path.exists(squid):
+        return False, "squid binary is not installed"
+    code, stdout, stderr = run([squid, "-k", "parse"], timeout=60)
+    if code == 0:
+        return True, stdout
+    return False, stderr or stdout
 
 
 def db_info():
@@ -458,8 +487,11 @@ def eicar_test():
     curl = shutil.which("curl") or "/usr/local/bin/curl"
     if not os.path.exists(curl):
         return {"result": "failed_unknown", "message": "curl is not installed"}
+    squid_result = start_or_reload_squid()
+    if squid_result[0] != 0:
+        return {"result": "failed_squid", "message": squid_result[2] or squid_result[1]}
     code, stdout, stderr = run(
-        [curl, "-sS", "-m", "30", "-x", "http://127.0.0.1:3128", "-i", url],
+        [curl, "-sS", "-m", "30", "-x", "http://127.0.0.1:%d" % SQUID_TEST_PORT, "-i", url],
         timeout=40,
     )
     output = stdout + stderr
