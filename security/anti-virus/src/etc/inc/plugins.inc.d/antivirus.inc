@@ -36,8 +36,24 @@ function antivirus_enabled()
 
 function antivirus_configure()
 {
-    mwexec('/usr/local/sbin/configctl template reload OPNsense/Antivirus');
-    mwexec('/usr/local/sbin/configctl antivirus reload');
+    return [
+        'webproxy' => ['antivirus_configure_do'],
+    ];
+}
+
+function antivirus_configure_do($verbose = false)
+{
+    $response = configd_run('template reload OPNsense/Antivirus');
+    if ($verbose) {
+        printf("template reload OPNsense/Antivirus: %s\n", trim($response));
+    }
+
+    if (antivirus_enabled()) {
+        $response = configd_run('antivirus reload');
+        if ($verbose) {
+            printf("antivirus reload: %s\n", trim($response));
+        }
+    }
 }
 
 function antivirus_install()
