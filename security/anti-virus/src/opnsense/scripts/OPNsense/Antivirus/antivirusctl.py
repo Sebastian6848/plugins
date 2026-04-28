@@ -125,6 +125,25 @@ def package_installed(pkg_name):
     return code == 0
 
 
+def package_installed_any(*pkg_names):
+    return any(package_installed(pkg_name) for pkg_name in pkg_names)
+
+
+def start_or_reload_squid():
+    if service_status("squid"):
+        return rc("reload", "squid")
+    pluginctl = "/usr/local/sbin/pluginctl"
+    if os.path.exists(pluginctl):
+        run([pluginctl, "-c", "webproxy", "start"], timeout=60)
+    return rc("start", "squid")
+
+
+def reload_squid_if_running():
+    if service_status("squid"):
+        return rc("reload", "squid")
+    return 0, "", "squid is not running"
+
+
 def db_info():
     version = ""
     updated_at = ""
@@ -181,7 +200,7 @@ def status():
 
     if not enabled:
         overall = "disabled"
-    elif not include_present or not package_installed("squid"):
+    elif not include_present or not package_installed_any("os-squid", "os-squid-devel"):
         overall = "misconfigured"
     elif squid_running and cicap_running and cicap_listening and clamd_running and (clamd_tcp or clamd_socket):
         overall = "healthy"
@@ -195,6 +214,7 @@ def status():
         "overall": overall,
         "squid": {
             "installed": package_installed("squid"),
+            "plugin_installed": package_installed_any("os-squid", "os-squid-devel"),
             "running": squid_running,
             "icap_include_present": include_present,
             "icap_runtime_enabled": include_present,
@@ -260,7 +280,7 @@ def start_services():
         if tcp_ready("127.0.0.1", 1344):
             break
         time.sleep(1)
-    rc("reload", "squid")
+    start_or_reload_squid()
     return status()
 
 
@@ -270,7 +290,7 @@ def stop_services():
             open(SQUID_ICAP_PATH, "w").close()
         except OSError:
             pass
-    rc("reload", "squid")
+    reload_squid_if_running()
     rc("stop", "c-icap")
     rc("stop", "clamav_clamd")
     return status()
@@ -289,7 +309,7 @@ def repair():
     rc("restart", "clamav_clamd")
     wait_clamd()
     rc("restart", "c-icap")
-    rc("reload", "squid")
+    start_or_reload_squid()
     parse_logs()
     return status()
 
