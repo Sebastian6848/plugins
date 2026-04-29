@@ -20,5 +20,18 @@ while [ ! -S "${SOCKET}" ]; do
 	sleep 1
 done
 
+mkdir -p /var/log/c-icap
+chown c_icap:c_icap /var/log/c-icap
+
+i=0
+while ! nc -z 127.0.0.1 3310 2>/dev/null; do
+	sleep 1
+	i=$((i + 1))
+	if [ $i -ge 30 ]; then
+		echo "clamd not ready after 30s, starting c-icap anyway"
+		break
+	fi
+done
+
 service c-icap onestart || exit 1
 configctl proxy restart || exit 1

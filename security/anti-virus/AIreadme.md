@@ -210,7 +210,7 @@
 # 执行步骤 (严格按顺序，每步失败立即 exit 1):
 #   1. configctl template reload OPNsense/Antivirus
 #   2. 检查 /var/run/clamav/clamd.sock 是否存在
-#      不存在则执行 service clamav-clamd onestart
+#      不存在则执行 service clamav_clamd onestart
 #      每秒轮询一次，最多等待 120 秒
 #      超时则输出错误并 exit 1
 #   3. service c-icap onestart
