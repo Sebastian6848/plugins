@@ -75,10 +75,10 @@ class LogsController extends ApiControllerBase
         $payload = strtolower($message);
         if (strpos($payload, 'virus detected') !== false || strpos($payload, 'infected') !== false) {
             return 'alert';
-        } elseif (strpos($payload, 'error') !== false || strpos($payload, 'failed') !== false) {
-            return 'error';
         } elseif (strpos($payload, 'warn') !== false) {
             return 'warning';
+        } elseif (strpos($payload, 'error') !== false || strpos($payload, 'failed') !== false) {
+            return 'error';
         }
         return 'info';
     }
