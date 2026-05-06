@@ -42,7 +42,7 @@ def modbus_options(function_code=None, unit_id=None):
             raise ValueError("Modbus unit id out of range: %d" % unit_id)
         options.append("modbus.unit_id:%d" % unit_id)
     if function_code is not None:
-        options.append("modbus.function_code:%d" % function_code)
+        options.append("modbus: function %d" % function_code)
     return options
 
 

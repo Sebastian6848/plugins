@@ -13,13 +13,13 @@ LEGACY_CONFIG_PATH = Path("/usr/local/etc/OPNsense/IndProto/IndProto.xml")
 CONFIG_PATH = Path(os.environ["INDPROTO_CONFIG"]) if "INDPROTO_CONFIG" in os.environ else None
 RULES_PATH = Path(os.environ.get(
     "INDPROTO_RULES",
-    "/usr/local/etc/suricata/rules/indproto.rules",
+    "/usr/local/etc/suricata/opnsense.rules/indproto.rules",
 ))
 SURICATA_YAML = Path(os.environ.get(
     "INDPROTO_SURICATA_YAML",
     "/usr/local/etc/suricata/suricata.yaml",
 ))
-RULES_INCLUDE = os.environ.get("INDPROTO_RULES_INCLUDE", str(RULES_PATH))
+RULES_INCLUDE = os.environ.get("INDPROTO_RULES_INCLUDE", "indproto.rules")
 CRON_PATH = Path(os.environ.get("INDPROTO_CRON", "/etc/cron.d/indproto"))
 
 SID_RANGES = {
