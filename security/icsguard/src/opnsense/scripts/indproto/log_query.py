@@ -101,6 +101,10 @@ def match(row, args, start_time, end_time):
 def normalize(row):
     alert = row.get("alert") or {}
     action = alert.get("action") or row.get("event_type") or ""
+    if action == "allowed":
+        action = "pass"
+    elif action == "blocked":
+        action = "drop"
     signature = alert.get("signature", "")
     proto = row.get("app_proto") or ""
     if not proto:

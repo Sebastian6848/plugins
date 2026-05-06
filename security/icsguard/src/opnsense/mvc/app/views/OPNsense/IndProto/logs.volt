@@ -12,6 +12,7 @@ $(document).ready(function() {
                 blocked: "label-danger",
                 pass: "label-success",
                 allowed: "label-success",
+                reject: "label-danger",
                 alert: "label-warning"
             };
             return '<span class="label ' + (classes[action] || "label-default") + '">' + htmlEscape(action) + '</span>';
