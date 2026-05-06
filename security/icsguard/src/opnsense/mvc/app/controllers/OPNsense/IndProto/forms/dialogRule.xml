@@ -1,0 +1,110 @@
+<form>
+    <field>
+        <id>rule.enabled</id>
+        <label>Enabled</label>
+        <type>checkbox</type>
+        <help>Enable this rule.</help>
+        <grid_view>
+            <width>6em</width>
+            <type>boolean</type>
+            <formatter>rowtoggle</formatter>
+        </grid_view>
+    </field>
+    <field>
+        <id>rule.description</id>
+        <label>Description</label>
+        <type>text</type>
+        <help>Letters, numbers, spaces and underscores only.</help>
+    </field>
+    <field>
+        <id>rule.protocol</id>
+        <label>Protocol</label>
+        <type>dropdown</type>
+        <help>Sprint 2 generates Modbus rules. Other protocols are reserved for later sprints.</help>
+    </field>
+    <field>
+        <id>rule.src_ip</id>
+        <label>Source IP</label>
+        <type>text</type>
+        <help>Source address or CIDR, or any.</help>
+    </field>
+    <field>
+        <id>rule.dst_ip</id>
+        <label>Destination IP</label>
+        <type>text</type>
+        <help>Destination address or CIDR, or any.</help>
+    </field>
+    <field>
+        <id>rule.dst_port</id>
+        <label>Destination port</label>
+        <type>text</type>
+        <help>Destination port for the selected protocol.</help>
+        <grid_view>
+            <visible>false</visible>
+        </grid_view>
+    </field>
+    <field>
+        <id>rule.action</id>
+        <label>Action</label>
+        <type>dropdown</type>
+        <help>Pass creates Suricata pass rules, block creates drop rules.</help>
+    </field>
+    <field>
+        <id>rule.access</id>
+        <label>Access</label>
+        <type>dropdown</type>
+        <help>Read and write map to predefined Modbus function code sets when function codes are empty.</help>
+    </field>
+    <field>
+        <id>rule.function_codes</id>
+        <label>Function codes</label>
+        <type>text</type>
+        <help>Use 1,2,3 or leave empty to use the access preset.</help>
+        <hint>1,2,3 or leave empty</hint>
+        <grid_view>
+            <visible>false</visible>
+        </grid_view>
+    </field>
+    <field>
+        <id>rule.modbus_unit_id</id>
+        <label>Modbus unit ID</label>
+        <type>text</type>
+        <help>Use a single unit id or a range such as 1-10.</help>
+        <grid_view>
+            <visible>false</visible>
+        </grid_view>
+    </field>
+    <field>
+        <id>rule.dnp3_object_group</id>
+        <label>DNP3 object group</label>
+        <type>text</type>
+        <help>Use comma separated DNP3 object group numbers.</help>
+        <grid_view>
+            <visible>false</visible>
+        </grid_view>
+    </field>
+    <field>
+        <id>rule.time_range_start</id>
+        <label>Start time</label>
+        <type>text</type>
+        <help>Optional HH:MM start of the active window.</help>
+        <grid_view>
+            <visible>false</visible>
+        </grid_view>
+    </field>
+    <field>
+        <id>rule.time_range_end</id>
+        <label>End time</label>
+        <type>text</type>
+        <help>Optional HH:MM end of the active window.</help>
+        <grid_view>
+            <visible>false</visible>
+        </grid_view>
+    </field>
+    <field>
+        <id>rule.log_only</id>
+        <label>Log only</label>
+        <type>checkbox</type>
+        <help>Generate alert rules regardless of the selected action.</help>
+    </field>
+</form>

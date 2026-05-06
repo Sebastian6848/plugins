@@ -1,0 +1,106 @@
+<model>
+    <mount>//OPNsense/IndProto</mount>
+    <version>1.0.0</version>
+    <description>Industrial protocol whitelist rules</description>
+    <items>
+        <general>
+            <enabled type="BooleanField">
+                <Default>1</Default>
+                <Required>Y</Required>
+            </enabled>
+            <default_action type="OptionField">
+                <Default>pass</Default>
+                <Required>Y</Required>
+                <OptionValues>
+                    <pass>Pass</pass>
+                    <block>Block</block>
+                </OptionValues>
+            </default_action>
+            <interface type="InterfaceField">
+                <Required>N</Required>
+            </interface>
+        </general>
+        <rules>
+            <rule type="ArrayField">
+                <enabled type="BooleanField">
+                    <Default>1</Default>
+                    <Required>Y</Required>
+                </enabled>
+                <description type="TextField">
+                    <Required>N</Required>
+                    <Mask>/^[0-9A-Za-z_ ]{0,255}$/</Mask>
+                    <ValidationMessage>Use letters, numbers, spaces and underscores only.</ValidationMessage>
+                </description>
+                <protocol type="OptionField">
+                    <Default>modbus</Default>
+                    <Required>Y</Required>
+                    <OptionValues>
+                        <modbus>Modbus</modbus>
+                        <nclink>NcLink</nclink>
+                        <dnp3>DNP3</dnp3>
+                        <s7comm>S7comm</s7comm>
+                    </OptionValues>
+                </protocol>
+                <src_ip type="NetworkField">
+                    <Default>0.0.0.0/0</Default>
+                    <Required>Y</Required>
+                    <NetMaskAllowed>Y</NetMaskAllowed>
+                </src_ip>
+                <dst_ip type="NetworkField">
+                    <Default>0.0.0.0/0</Default>
+                    <Required>Y</Required>
+                    <NetMaskAllowed>Y</NetMaskAllowed>
+                </dst_ip>
+                <dst_port type="PortField">
+                    <Required>Y</Required>
+                </dst_port>
+                <action type="OptionField">
+                    <Default>pass</Default>
+                    <Required>Y</Required>
+                    <OptionValues>
+                        <pass>Pass</pass>
+                        <block>Block</block>
+                    </OptionValues>
+                </action>
+                <access type="OptionField">
+                    <Default>readwrite</Default>
+                    <Required>Y</Required>
+                    <OptionValues>
+                        <read>Read</read>
+                        <write>Write</write>
+                        <readwrite>Read / Write</readwrite>
+                    </OptionValues>
+                </access>
+                <function_codes type="TextField">
+                    <Required>N</Required>
+                    <Mask>/^[0-9,]*$/</Mask>
+                    <ValidationMessage>Use comma separated decimal function codes only.</ValidationMessage>
+                </function_codes>
+                <dnp3_object_group type="TextField">
+                    <Required>N</Required>
+                    <Mask>/^[0-9,]*$/</Mask>
+                    <ValidationMessage>Use comma separated decimal DNP3 object group numbers only.</ValidationMessage>
+                </dnp3_object_group>
+                <modbus_unit_id type="TextField">
+                    <Required>N</Required>
+                    <Mask>/^[0-9-]*$/</Mask>
+                    <ValidationMessage>Use a single Modbus unit id or range such as 1-10.</ValidationMessage>
+                </modbus_unit_id>
+                <time_range_start type="TextField">
+                    <Required>N</Required>
+                    <Mask>/^$|^([01][0-9]|2[0-3]):[0-5][0-9]$/</Mask>
+                    <ValidationMessage>Use HH:MM format.</ValidationMessage>
+                </time_range_start>
+                <time_range_end type="TextField">
+                    <Required>N</Required>
+                    <Mask>/^$|^([01][0-9]|2[0-3]):[0-5][0-9]$/</Mask>
+                    <ValidationMessage>Use HH:MM format.</ValidationMessage>
+                </time_range_end>
+                <log_only type="BooleanField">
+                    <Default>0</Default>
+                    <Required>Y</Required>
+                </log_only>
+            </rule>
+        </rules>
+    </items>
+</model>

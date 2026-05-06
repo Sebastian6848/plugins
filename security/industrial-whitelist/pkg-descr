@@ -1,7 +1,0 @@
-Industrial protocol whitelist plugin for OPNsense.
-
-v1.5 scope:
-- L4 pf allowlist admission control for managed industrial ports
-- L7 Suricata rule generation for Modbus TCP and DNP3 function-level control
-- Protocol-aware fallback strategy (L7 full support + L4-only support)
-- UI dynamic behavior for function-code controls by protocol type

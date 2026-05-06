@@ -1,0 +1,9 @@
+<acl>
+    <page-firewall-indproto>
+        <name>Firewall: Industrial Protocol</name>
+        <patterns>
+            <pattern>ui/indproto/*</pattern>
+            <pattern>api/indproto/*</pattern>
+        </patterns>
+    </page-firewall-indproto>
+</acl>

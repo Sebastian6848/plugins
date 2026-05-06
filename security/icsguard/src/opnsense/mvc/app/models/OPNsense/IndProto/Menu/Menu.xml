@@ -1,0 +1,8 @@
+<menu>
+    <Firewall>
+        <IndProto VisibleName="Industrial Protocol" cssClass="fa fa-industry fa-fw" order="90">
+            <Rules order="10" url="/ui/indproto/"/>
+            <Logs order="20" url="/ui/indproto/logs"/>
+        </IndProto>
+    </Firewall>
+</menu>

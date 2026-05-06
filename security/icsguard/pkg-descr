@@ -1,0 +1,4 @@
+ICSGUARD generates Suricata IPS rules from a compact industrial protocol
+whitelist configuration.  Sprint 1 provides the backend-only path for Modbus:
+read IndProto XML, generate indproto.rules, and expose configd actions for
+reload and Suricata restart.
