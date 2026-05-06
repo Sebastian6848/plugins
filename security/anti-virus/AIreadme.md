@@ -178,7 +178,7 @@
 #   MaxMemObject 4096
 #   Module common clamd_mod.so
 #   clamd_mod.ClamdSocket /var/run/clamav/clamd.sock
-#   Service antivirus virus_scan.so
+#   Service avscan virus_scan.so
 #   virus_scan.ScanFileTypes TEXT DATA EXECUTABLE ARCHIVE GIF JPEG MSOFFICE
 #   virus_scan.Allow204Responces on
 #   virus_scan.PassOnError on
@@ -191,7 +191,7 @@
 # 条件判断语法必须参考 clamav 或 c-icap 模板里的 if 写法，不要自行发明
 # 内容 (enabled=1 时):
 #   icap_enable on
-#   icap_service service_av respmod_precache icap://127.0.0.1:1344/antivirus
+#   icap_service service_av respmod_precache icap://127.0.0.1:1344/avscan
 #   adaptation_access service_av allow all
 #   icap_preview_enable on
 #   icap_send_client_ip on
