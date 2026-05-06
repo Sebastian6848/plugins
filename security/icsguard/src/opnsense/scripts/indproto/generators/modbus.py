@@ -35,14 +35,18 @@ def unit_values(value):
     return [int(value, 10)]
 
 
+def byte_value(value, field_name):
+    if value < 0 or value > 255:
+        raise ValueError("%s out of range: %d" % (field_name, value))
+    return "%02x" % value
+
+
 def modbus_options(function_code=None, unit_id=None):
-    options = ["app-layer-protocol:modbus"]
+    options = ['content:"|00 00|"; offset:2; depth:2']
     if unit_id is not None:
-        if unit_id < 0 or unit_id > 255:
-            raise ValueError("Modbus unit id out of range: %d" % unit_id)
-        options.append("modbus.unit_id:%d" % unit_id)
+        options.append('content:"|%s|"; offset:6; depth:1' % byte_value(unit_id, "Modbus unit id"))
     if function_code is not None:
-        options.append("modbus: function %d" % function_code)
+        options.append('content:"|%s|"; offset:7; depth:1' % byte_value(function_code, "Modbus function code"))
     return options
 
 
@@ -89,5 +93,5 @@ def default_block(sid, default_action):
         str(DEFAULT_PORT),
         "IndProto default Modbus block",
         sid,
-        ["flow:to_server,established", "app-layer-protocol:modbus"],
+        ["flow:to_server,established", 'content:"|00 00|"; offset:2; depth:2'],
     )]
