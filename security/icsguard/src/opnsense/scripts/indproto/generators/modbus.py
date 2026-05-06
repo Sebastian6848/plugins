@@ -35,19 +35,19 @@ def unit_values(value):
     return [int(value, 10)]
 
 
-def modbus_option(function_code=None, unit_id=None):
-    parts = []
+def modbus_options(function_code=None, unit_id=None):
+    options = ["app-layer-protocol:modbus"]
     if unit_id is not None:
         if unit_id < 0 or unit_id > 255:
             raise ValueError("Modbus unit id out of range: %d" % unit_id)
-        parts.append("unit %d" % unit_id)
+        options.append("modbus.unit_id:%d" % unit_id)
     if function_code is not None:
-        parts.append("function %d" % function_code)
-    return "modbus: %s" % ", ".join(parts) if parts else None
+        options.append("modbus.function_code:%d" % function_code)
+    return options
 
 
 def generate(rule_index, rule):
-    src_ip, dst_ip, dst_port = header(rule, "modbus", DEFAULT_PORT)
+    src_ip, dst_ip, dst_port = header(rule, "tcp", DEFAULT_PORT)
     act = action(rule)
     result = []
     units = unit_values(rule.get("modbus_unit_id"))
@@ -58,9 +58,7 @@ def generate(rule_index, rule):
     for unit_id in units:
         for function_code in sequence:
             options = ["flow:to_server,established"]
-            keyword = modbus_option(function_code, unit_id)
-            if keyword is not None:
-                options.append(keyword)
+            options.extend(modbus_options(function_code, unit_id))
             suffix = ""
             if function_code is not None:
                 suffix += " fc %d" % function_code
@@ -68,7 +66,7 @@ def generate(rule_index, rule):
                 suffix += " unit %d" % unit_id
             result.append(build(
                 act,
-                "modbus",
+                "tcp",
                 src_ip,
                 dst_ip,
                 dst_port,
@@ -85,11 +83,11 @@ def default_block(sid, default_action):
         return []
     return [build(
         "drop",
-        "modbus",
+        "tcp",
         "any",
         "any",
         str(DEFAULT_PORT),
         "IndProto default Modbus block",
         sid,
-        ["flow:to_server,established"],
+        ["flow:to_server,established", "app-layer-protocol:modbus"],
     )]
