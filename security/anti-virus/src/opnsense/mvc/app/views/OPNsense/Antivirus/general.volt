@@ -50,30 +50,37 @@ POSSIBILITY OF SUCH DAMAGE.
                         <tr>
                             <td>{{ lang._('ClamAV Engine') }}</td>
                             <td><span id="clamd_status" class="label label-danger">{{ lang._('stopped') }}</span></td>
+                            <td><button class="btn btn-xs btn-default antivirus-component-start" data-service="clamd" type="button">{{ lang._('Start') }} <i></i></button></td>
                         </tr>
                         <tr>
                             <td>{{ lang._('ICAP Service') }}</td>
                             <td><span id="cicap_status" class="label label-danger">{{ lang._('stopped') }}</span></td>
+                            <td><button class="btn btn-xs btn-default antivirus-component-start" data-service="cicap" type="button">{{ lang._('Start') }} <i></i></button></td>
                         </tr>
                         <tr>
                             <td>{{ lang._('Freshclam Service') }}</td>
                             <td><span id="freshclam_status" class="label label-danger">{{ lang._('stopped') }}</span></td>
+                            <td><button class="btn btn-xs btn-default antivirus-component-start" data-service="freshclam" type="button">{{ lang._('Start') }} <i></i></button></td>
                         </tr>
                         <tr>
                             <td>{{ lang._('Squid ICAP') }}</td>
                             <td><span id="squid_icap_status" class="label label-danger">{{ lang._('inactive') }}</span></td>
+                            <td><button class="btn btn-xs btn-default antivirus-component-start" data-service="squid_icap" type="button">{{ lang._('Apply') }} <i></i></button></td>
                         </tr>
                         <tr>
                             <td>{{ lang._('SSL Inspection') }}</td>
                             <td><span id="ssl_bump_status" class="label label-danger">{{ lang._('disabled') }}</span></td>
+                            <td></td>
                         </tr>
                         <tr>
                             <td>{{ lang._('SSL Mode') }}</td>
                             <td><span id="ssl_mode">-</span></td>
+                            <td></td>
                         </tr>
                         <tr>
                             <td>{{ lang._('SSL CA') }}</td>
                             <td><span id="ssl_ca_status" class="label label-danger">{{ lang._('missing') }}</span></td>
+                            <td></td>
                         </tr>
                     </tbody>
                 </table>
@@ -91,6 +98,7 @@ POSSIBILITY OF SUCH DAMAGE.
                 <hr />
                 <button class="btn btn-primary" id="saveAct" type="button"><b>{{ lang._('Save') }}</b> <i id="saveAct_progress"></i></button>
                 <button class="btn btn-primary" id="applyAct" type="button"><b>{{ lang._('Apply') }}</b> <i id="applyAct_progress"></i></button>
+                <button class="btn btn-primary" id="restartAct" type="button"><b>{{ lang._('Restart') }}</b> <i id="restartAct_progress"></i></button>
             </div>
         </div>
     </div>
@@ -234,6 +242,27 @@ $( document ).ready(function() {
                 refreshAntivirusStatus();
                 $("#applyAct_progress").removeClass("fa fa-spinner fa-pulse");
             });
+        });
+    });
+
+    $("#restartAct").click(function(){
+        $("#restartAct_progress").addClass("fa fa-spinner fa-pulse");
+        ajaxCall(url="/api/antivirus/service/restart", sendData={}, callback=function(data,status) {
+            refreshAntivirusStatus();
+            $("#restartAct_progress").removeClass("fa fa-spinner fa-pulse");
+        });
+    });
+
+    $(".antivirus-component-start").click(function(){
+        var button = $(this);
+        var service = button.data("service");
+        var progress = button.find("i");
+        button.prop("disabled", true);
+        progress.addClass("fa fa-spinner fa-pulse");
+        ajaxCall(url="/api/antivirus/service/start_service/" + service, sendData={}, callback=function(data,status) {
+            refreshAntivirusStatus();
+            progress.removeClass("fa fa-spinner fa-pulse");
+            button.prop("disabled", false);
         });
     });
 

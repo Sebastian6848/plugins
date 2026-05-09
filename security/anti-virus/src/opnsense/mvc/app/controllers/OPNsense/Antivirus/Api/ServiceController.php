@@ -67,6 +67,16 @@ class ServiceController extends ApiControllerBase
         return array("status" => "error");
     }
 
+    public function startServiceAction($service = '')
+    {
+        if ($this->request->isPost() && in_array($service, array('clamd', 'cicap', 'freshclam', 'squid_icap'))) {
+            $backend = new Backend();
+            $response = trim($backend->configdRun("antivirus start_service " . $service));
+            return array("status" => $response);
+        }
+        return array("status" => "error");
+    }
+
     public function reconfigureAction()
     {
         if ($this->request->isPost()) {
