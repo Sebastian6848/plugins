@@ -7,6 +7,8 @@
 
 namespace OPNsense\AppIdentification\Api;
 
+use OPNsense\Core\Config;
+
 /**
  * Class FlowsController
  *
@@ -14,6 +16,13 @@ namespace OPNsense\AppIdentification\Api;
  */
 class FlowsController extends GeneralController
 {
+	/**
+	 * Cached system timezone for formatting flow timestamps.
+	 *
+	 * @var \DateTimeZone|null
+	 */
+	private $systemTimeZone = null;
+
 	/**
 	 * Search active flows for DataTables.
 	 *
@@ -383,11 +392,13 @@ class FlowsController extends GeneralController
 		$serverName = (string)($server['name'] ?? '');
 		$clientHost = $clientName !== '' ? $clientName : (string)($client['ip'] ?? '');
 		$serverHost = $serverName !== '' ? $serverName : (string)($server['ip'] ?? '');
+		$lastSeen = $this->normalizeUnixTimestamp($record['last_seen'] ?? time());
 
 		return [
 			'flow_key' => $this->flowRecordKey($record),
 			'hash_id' => $record['hash_id'] ?? '',
-			'last_seen' => date('H:i:s', (int)($record['last_seen'] ?? time())),
+			'last_seen' => $this->formatLocalTime($lastSeen),
+			'last_seen_ts' => $lastSeen,
 			'duration' => sprintf('%02d:%02d', intdiv($duration, 60), $duration % 60),
 			'protocol' => trim($l4 . ':' . $l7, ':'),
 			'l4_proto' => $l4,
@@ -582,7 +593,90 @@ class FlowsController extends GeneralController
 			$timestamp = $timestamp / 1000;
 		}
 
-		return date('Y-m-d H:i:s', (int)$timestamp);
+		return $this->formatLocalDateTime((int)$timestamp);
+	}
+
+	/**
+	 * Normalize ntopng timestamps to Unix seconds.
+	 *
+	 * @param mixed $value
+	 * @return int
+	 */
+	private function normalizeUnixTimestamp($value): int
+	{
+		$timestamp = is_numeric($value) ? (float)$value : (float)time();
+		if ($timestamp > 9999999999) {
+			$timestamp = $timestamp / 1000;
+		}
+
+		return (int)$timestamp;
+	}
+
+	/**
+	 * Format a Unix timestamp as local system time.
+	 *
+	 * @param int $timestamp
+	 * @return string
+	 */
+	private function formatLocalTime(int $timestamp): string
+	{
+		return $this->formatTimestampWithZone($timestamp, 'H:i:s');
+	}
+
+	/**
+	 * Format a Unix timestamp as local system date time.
+	 *
+	 * @param int $timestamp
+	 * @return string
+	 */
+	private function formatLocalDateTime(int $timestamp): string
+	{
+		return $this->formatTimestampWithZone($timestamp, 'Y-m-d H:i:s');
+	}
+
+	/**
+	 * Format a Unix timestamp with the configured OPNsense timezone.
+	 *
+	 * @param int $timestamp
+	 * @param string $format
+	 * @return string
+	 */
+	private function formatTimestampWithZone(int $timestamp, string $format): string
+	{
+		$dateTime = (new \DateTimeImmutable('@' . $timestamp))->setTimezone($this->getSystemTimeZone());
+		return $dateTime->format($format);
+	}
+
+	/**
+	 * Return the configured OPNsense timezone, falling back to PHP defaults.
+	 *
+	 * @return \DateTimeZone
+	 */
+	private function getSystemTimeZone(): \DateTimeZone
+	{
+		if ($this->systemTimeZone !== null) {
+			return $this->systemTimeZone;
+		}
+
+		$timezone = '';
+		try {
+			$timezone = trim((string)Config::getInstance()->object()->system->timezone);
+		} catch (\Throwable $e) {
+			syslog(LOG_WARNING, 'AppIdentification: unable to read system timezone: ' . $e->getMessage());
+		}
+
+		if ($timezone === '') {
+			$timezone = date_default_timezone_get() ?: 'Etc/UTC';
+		}
+
+		try {
+			$this->systemTimeZone = new \DateTimeZone($timezone);
+		} catch (\Throwable $e) {
+			syslog(LOG_WARNING, sprintf('AppIdentification: invalid system timezone "%s", falling back to UTC', $timezone));
+			$this->systemTimeZone = new \DateTimeZone('Etc/UTC');
+		}
+
+		return $this->systemTimeZone;
 	}
 
 	/**
