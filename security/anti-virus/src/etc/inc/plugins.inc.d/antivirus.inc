@@ -37,8 +37,21 @@ function antivirus_enabled()
 function antivirus_configure()
 {
     return [
+        'bootup' => ['antivirus_bootup'],
         'webproxy' => ['antivirus_configure_do'],
     ];
+}
+
+function antivirus_bootup($verbose = false)
+{
+    if (!antivirus_enabled()) {
+        return;
+    }
+
+    $response = configd_run('antivirus restart');
+    if ($verbose) {
+        printf("antivirus restart: %s\n", trim($response));
+    }
 }
 
 function antivirus_configure_do($verbose = false)

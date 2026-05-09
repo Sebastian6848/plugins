@@ -82,7 +82,11 @@ class ServiceController extends ApiControllerBase
         $backend = new Backend();
         $response = json_decode(trim($backend->configdRun("antivirus status")), true);
         if ($response != null) {
-            $response['status'] = ($response['clamd'] ?? '') == 'running' && ($response['cicap'] ?? '') == 'running' ? 'running' : 'stopped';
+            $response['status'] = (
+                ($response['clamd'] ?? '') == 'running' &&
+                ($response['cicap'] ?? '') == 'running' &&
+                ($response['squid_icap'] ?? '') == 'active'
+            ) ? 'running' : 'stopped';
             $response['widget'] = array(
                 'caption_start' => gettext('Start Antivirus'),
                 'caption_restart' => gettext('Restart Antivirus'),
