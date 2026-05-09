@@ -20,7 +20,7 @@
         <id>rule.match_type</id>
         <label>Match Type</label>
         <type>dropdown</type>
-        <help>Select which flow field should be matched. Domain checks server.name, IP and CIDR check client/server IPs, port checks server.port, and protocol checks L7 protocol text.</help>
+        <help>Select which flow field should be matched. Domain uses boundary matching against server.name, IP and CIDR check client/server IPs, port checks server.port, and protocol checks L7 protocol text.</help>
     </field>
     <field>
         <id>rule.match_value</id>
@@ -28,7 +28,7 @@
         <type>textbox</type>
         <style>form-control</style>
         <height>6</height>
-        <help>每行一个匹配值，命中任意一行即视为匹配。Domain 类型：填写域名子串，如 weixin.qq.com。IP 类型：每行一个 IP 地址。CIDR 类型：每行一个 CIDR 段，如 10.10.0.0/24。Port 类型：每行一个端口号。Protocol 类型：每行一个 L7 协议名，如 TLS.WeChat。</help>
+        <help>每行一个匹配值，命中任意一行即视为匹配。Domain 类型：填写完整域名或域名后缀，如 le.com 可匹配 le.com、www.le.com，但不会匹配 google.com。IP 类型：每行一个 IP 地址。CIDR 类型：每行一个 CIDR 段，如 10.10.0.0/24。Port 类型：每行一个端口号。Protocol 类型：每行一个 L7 协议名，如 TLS.WeChat。</help>
     </field>
     <field>
         <id>rule.app_label</id>

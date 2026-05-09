@@ -407,9 +407,14 @@ All rights reserved.
 			return rules.map(function (rule, index) {
 				const copy = $.extend(true, {}, rule || {});
 				copy._match_order = index;
-				if (Array.isArray(copy.match_values)) {
+				if (String(copy.match_type || '') === 'domain' && Array.isArray(copy.match_values)) {
 					copy.match_values.sort(function (left, right) {
-						return String(right || '').length - String(left || '').length;
+						const leftSpecificity = domainSpecificity(left);
+						const rightSpecificity = domainSpecificity(right);
+						if (rightSpecificity.labels !== leftSpecificity.labels) {
+							return rightSpecificity.labels - leftSpecificity.labels;
+						}
+						return rightSpecificity.length - leftSpecificity.length;
 					});
 				}
 				return copy;
@@ -417,9 +422,13 @@ All rights reserved.
 				const leftType = String(left.match_type || '');
 				const rightType = String(right.match_type || '');
 				if (leftType === 'domain' && rightType === 'domain') {
-					const result = longestMatchValueLength(right) - longestMatchValueLength(left);
-					if (result !== 0) {
-						return result;
+					const leftSpecificity = ruleDomainSpecificity(left);
+					const rightSpecificity = ruleDomainSpecificity(right);
+					if (rightSpecificity.labels !== leftSpecificity.labels) {
+						return rightSpecificity.labels - leftSpecificity.labels;
+					}
+					if (rightSpecificity.length !== leftSpecificity.length) {
+						return rightSpecificity.length - leftSpecificity.length;
 					}
 				}
 				return Number(left._match_order || 0) - Number(right._match_order || 0);
@@ -429,10 +438,76 @@ All rights reserved.
 			});
 		}
 
-		function longestMatchValueLength(rule) {
-			return splitRuleMatchValues(rule).reduce(function (maxLength, value) {
-				return Math.max(maxLength, String(value || '').length);
-			}, 0);
+		function normalizeDomain(value) {
+			let text = String(value || '').trim().toLowerCase();
+			if (text === '') {
+				return '';
+			}
+
+			try {
+				if (text.indexOf('://') !== -1) {
+					text = new URL(text).hostname || text;
+				} else if (text.indexOf('/') !== -1) {
+					text = new URL('http://' + text).hostname || text;
+				}
+			} catch (err) {
+			}
+
+			const bracketMatch = text.match(/^\[([^\]]+)\](?::\d+)?$/);
+			if (bracketMatch) {
+				text = bracketMatch[1];
+			} else if ((text.match(/:/g) || []).length === 1) {
+				const parts = text.split(':');
+				if (/^\d+$/.test(parts[1])) {
+					text = parts[0];
+				}
+			}
+
+			return text.trim().replace(/\.+$/, '');
+		}
+
+		function domainRuleMatches(host, ruleDomain) {
+			const rawRule = String(ruleDomain || '').trim().toLowerCase();
+			if (host === '' || rawRule === '') {
+				return false;
+			}
+
+			if (rawRule.indexOf('*.') === 0) {
+				const base = normalizeDomain(rawRule.slice(2));
+				return base !== '' && host !== base && host.endsWith('.' + base);
+			}
+
+			if (rawRule.indexOf('.') === 0) {
+				const base = normalizeDomain(rawRule.slice(1));
+				return base !== '' && (host === base || host.endsWith('.' + base));
+			}
+
+			const base = normalizeDomain(rawRule);
+			return base !== '' && (host === base || host.endsWith('.' + base));
+		}
+
+		function domainSpecificity(value) {
+			let text = String(value || '').trim().toLowerCase();
+			if (text.indexOf('*.') === 0) {
+				text = text.slice(2);
+			} else if (text.indexOf('.') === 0) {
+				text = text.slice(1);
+			}
+			const domain = normalizeDomain(text);
+			return {
+				labels: domain === '' ? 0 : domain.split('.').length,
+				length: domain.length
+			};
+		}
+
+		function ruleDomainSpecificity(rule) {
+			return splitRuleMatchValues(rule).reduce(function (best, value) {
+				const current = domainSpecificity(value);
+				if (current.labels > best.labels || (current.labels === best.labels && current.length > best.length)) {
+					return current;
+				}
+				return best;
+			}, {labels: 0, length: 0});
 		}
 
 		function ipv4ToNumber(ip) {
@@ -490,14 +565,12 @@ All rights reserved.
 		}
 
 		function matchCustomRule(row) {
-			const serverName = String(row.server_name || '').toLowerCase();
+			const serverName = normalizeDomain(row.server_name || '');
 			const serverIp = String(row.server_ip || '');
 			const clientIp = String(row.client_ip || '');
 			const serverPort = String(row.server_port || '');
 			const protocol = String(row.protocol || row.l7_proto || row.info || '').toLowerCase();
 
-			let bestDomainRule = null;
-			let bestDomainLength = -1;
 			for (let idx = 0; idx < customApplicationRules.length; idx++) {
 				const rule = customApplicationRules[idx] || {};
 				const type = String(rule.match_type || '');
@@ -508,16 +581,11 @@ All rights reserved.
 
 				if (type === 'domain') {
 					for (let i = 0; i < values.length; i++) {
-						const needle = values[i].toLowerCase();
-						if (needle.length > bestDomainLength && serverName.indexOf(needle) !== -1) {
-							bestDomainRule = rule;
-							bestDomainLength = needle.length;
+						if (domainRuleMatches(serverName, values[i])) {
+							return rule;
 						}
 					}
 				}
-			}
-			if (bestDomainRule !== null) {
-				return bestDomainRule;
 			}
 
 			for (let idx = 0; idx < customApplicationRules.length; idx++) {

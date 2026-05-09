@@ -457,9 +457,15 @@ class RuleController extends ApiMutableModelControllerBase
 	{
 		foreach ($rules as $index => &$rule) {
 			$rule['_match_order'] = $index;
-			if (is_array($rule['match_values'] ?? null)) {
+			if ((string)($rule['match_type'] ?? '') === 'domain' && is_array($rule['match_values'] ?? null)) {
 				usort($rule['match_values'], function ($left, $right) {
-					return strlen((string)$right) <=> strlen((string)$left);
+					$leftSpecificity = $this->domainSpecificity((string)$left);
+					$rightSpecificity = $this->domainSpecificity((string)$right);
+					$result = $rightSpecificity['labels'] <=> $leftSpecificity['labels'];
+					if ($result !== 0) {
+						return $result;
+					}
+					return $rightSpecificity['length'] <=> $leftSpecificity['length'];
 				});
 			}
 		}
@@ -469,7 +475,13 @@ class RuleController extends ApiMutableModelControllerBase
 			$leftType = (string)($left['match_type'] ?? '');
 			$rightType = (string)($right['match_type'] ?? '');
 			if ($leftType === 'domain' && $rightType === 'domain') {
-				$result = $this->longestMatchValueLength($right) <=> $this->longestMatchValueLength($left);
+				$leftSpecificity = $this->ruleDomainSpecificity($left);
+				$rightSpecificity = $this->ruleDomainSpecificity($right);
+				$result = $rightSpecificity['labels'] <=> $leftSpecificity['labels'];
+				if ($result !== 0) {
+					return $result;
+				}
+				$result = $rightSpecificity['length'] <=> $leftSpecificity['length'];
 				if ($result !== 0) {
 					return $result;
 				}
@@ -485,16 +497,62 @@ class RuleController extends ApiMutableModelControllerBase
 		return $rules;
 	}
 
-	private function longestMatchValueLength(array $rule): int
+	private function normalizeDomain(string $value): string
+	{
+		$value = strtolower(trim($value));
+		if ($value === '') {
+			return '';
+		}
+
+		if (strpos($value, '://') !== false) {
+			$host = parse_url($value, PHP_URL_HOST);
+			$value = is_string($host) ? $host : $value;
+		} elseif (strpos($value, '/') !== false) {
+			$host = parse_url('http://' . $value, PHP_URL_HOST);
+			$value = is_string($host) ? $host : $value;
+		}
+
+		if (preg_match('/^\[([^\]]+)\](?::\d+)?$/', $value, $matches)) {
+			$value = $matches[1];
+		} elseif (substr_count($value, ':') === 1) {
+			$parts = explode(':', $value, 2);
+			if (ctype_digit($parts[1])) {
+				$value = $parts[0];
+			}
+		}
+
+		return rtrim(trim($value), '.');
+	}
+
+	private function domainSpecificity(string $value): array
+	{
+		$value = strtolower(trim($value));
+		if (strpos($value, '*.') === 0) {
+			$value = substr($value, 2);
+		} elseif (strpos($value, '.') === 0) {
+			$value = substr($value, 1);
+		}
+
+		$domain = $this->normalizeDomain($value);
+		return [
+			'labels' => $domain === '' ? 0 : substr_count($domain, '.') + 1,
+			'length' => strlen($domain)
+		];
+	}
+
+	private function ruleDomainSpecificity(array $rule): array
 	{
 		$values = is_array($rule['match_values'] ?? null)
 			? $rule['match_values']
 			: $this->splitMatchValues((string)($rule['match_value'] ?? ''));
-		$length = 0;
+		$best = ['labels' => 0, 'length' => 0];
 		foreach ($values as $value) {
-			$length = max($length, strlen((string)$value));
+			$current = $this->domainSpecificity((string)$value);
+			if ($current['labels'] > $best['labels'] || ($current['labels'] === $best['labels'] && $current['length'] > $best['length'])) {
+				$best = $current;
+			}
 		}
-		return $length;
+		return $best;
 	}
 
 	private function normalizeImportedMatchValue($rawValue): string

@@ -698,14 +698,12 @@ class ApplicationsController extends GeneralController
 	{
 		$client = is_array($flow['client'] ?? null) ? $flow['client'] : [];
 		$server = is_array($flow['server'] ?? null) ? $flow['server'] : [];
-		$serverName = strtolower((string)($server['name'] ?? ''));
+		$serverName = $this->normalizeDomain((string)($server['name'] ?? ''));
 		$serverIp = (string)($server['ip'] ?? '');
 		$clientIp = (string)($client['ip'] ?? '');
 		$serverPort = (string)($server['port'] ?? '');
 		$protocol = strtolower((string)($flow['protocol']['l7'] ?? $flow['l7_proto'] ?? ''));
 
-		$bestDomainRule = null;
-		$bestDomainLength = -1;
 		foreach ($rules as $rule) {
 			$values = is_array($rule['match_values'] ?? null)
 				? $rule['match_values']
@@ -718,16 +716,10 @@ class ApplicationsController extends GeneralController
 				continue;
 			}
 			foreach ($values as $value) {
-				$needle = strtolower((string)$value);
-				$length = strlen($needle);
-				if ($length > $bestDomainLength && strpos($serverName, $needle) !== false) {
-					$bestDomainRule = $rule;
-					$bestDomainLength = $length;
+				if ($this->domainRuleMatches($serverName, (string)$value)) {
+					return $rule;
 				}
 			}
-		}
-		if ($bestDomainRule !== null) {
-			return $bestDomainRule;
 		}
 
 		foreach ($rules as $rule) {
@@ -788,9 +780,15 @@ class ApplicationsController extends GeneralController
 	{
 		foreach ($rules as $index => &$rule) {
 			$rule['_match_order'] = $index;
-			if (is_array($rule['match_values'] ?? null)) {
+			if ((string)($rule['match_type'] ?? '') === 'domain' && is_array($rule['match_values'] ?? null)) {
 				usort($rule['match_values'], function ($left, $right) {
-					return strlen((string)$right) <=> strlen((string)$left);
+					$leftSpecificity = $this->domainSpecificity((string)$left);
+					$rightSpecificity = $this->domainSpecificity((string)$right);
+					$result = $rightSpecificity['labels'] <=> $leftSpecificity['labels'];
+					if ($result !== 0) {
+						return $result;
+					}
+					return $rightSpecificity['length'] <=> $leftSpecificity['length'];
 				});
 			}
 		}
@@ -800,7 +798,13 @@ class ApplicationsController extends GeneralController
 			$leftType = (string)($left['match_type'] ?? '');
 			$rightType = (string)($right['match_type'] ?? '');
 			if ($leftType === 'domain' && $rightType === 'domain') {
-				$result = $this->longestMatchValueLength($right) <=> $this->longestMatchValueLength($left);
+				$leftSpecificity = $this->ruleDomainSpecificity($left);
+				$rightSpecificity = $this->ruleDomainSpecificity($right);
+				$result = $rightSpecificity['labels'] <=> $leftSpecificity['labels'];
+				if ($result !== 0) {
+					return $result;
+				}
+				$result = $rightSpecificity['length'] <=> $leftSpecificity['length'];
 				if ($result !== 0) {
 					return $result;
 				}
@@ -817,21 +821,119 @@ class ApplicationsController extends GeneralController
 	}
 
 	/**
-	 * Return the longest configured matching value for sorting specificity.
+	 * Normalize host or rule text before domain matching.
+	 *
+	 * @param string $value
+	 * @return string
+	 */
+	private function normalizeDomain(string $value): string
+	{
+		$value = strtolower(trim($value));
+		if ($value === '') {
+			return '';
+		}
+
+		if (strpos($value, '://') !== false) {
+			$host = parse_url($value, PHP_URL_HOST);
+			$value = is_string($host) ? $host : $value;
+		} elseif (strpos($value, '/') !== false) {
+			$host = parse_url('http://' . $value, PHP_URL_HOST);
+			$value = is_string($host) ? $host : $value;
+		}
+
+		if (preg_match('/^\[([^\]]+)\](?::\d+)?$/', $value, $matches)) {
+			$value = $matches[1];
+		} elseif (substr_count($value, ':') === 1) {
+			$parts = explode(':', $value, 2);
+			if (ctype_digit($parts[1])) {
+				$value = $parts[0];
+			}
+		}
+
+		return rtrim(trim($value), '.');
+	}
+
+	/**
+	 * Match a normalized host against a normalized domain boundary rule.
+	 *
+	 * @param string $host
+	 * @param string $ruleDomain
+	 * @return bool
+	 */
+	private function domainRuleMatches(string $host, string $ruleDomain): bool
+	{
+		$rawRule = strtolower(trim($ruleDomain));
+		if ($rawRule === '') {
+			return false;
+		}
+
+		if (strpos($rawRule, '*.') === 0) {
+			$base = $this->normalizeDomain(substr($rawRule, 2));
+			return $base !== '' && $host !== $base && $this->endsWith($host, '.' . $base);
+		}
+
+		if (strpos($rawRule, '.') === 0) {
+			$base = $this->normalizeDomain(substr($rawRule, 1));
+			return $base !== '' && ($host === $base || $this->endsWith($host, '.' . $base));
+		}
+
+		$base = $this->normalizeDomain($rawRule);
+		return $base !== '' && ($host === $base || $this->endsWith($host, '.' . $base));
+	}
+
+	/**
+	 * Return domain specificity as label count and normalized length.
+	 *
+	 * @param string $value
+	 * @return array
+	 */
+	private function domainSpecificity(string $value): array
+	{
+		$value = strtolower(trim($value));
+		if (strpos($value, '*.') === 0) {
+			$value = substr($value, 2);
+		} elseif (strpos($value, '.') === 0) {
+			$value = substr($value, 1);
+		}
+
+		$domain = $this->normalizeDomain($value);
+		return [
+			'labels' => $domain === '' ? 0 : substr_count($domain, '.') + 1,
+			'length' => strlen($domain)
+		];
+	}
+
+	/**
+	 * Return the most specific domain value from one rule.
 	 *
 	 * @param array $rule
-	 * @return int
+	 * @return array
 	 */
-	private function longestMatchValueLength(array $rule): int
+	private function ruleDomainSpecificity(array $rule): array
 	{
 		$values = is_array($rule['match_values'] ?? null)
 			? $rule['match_values']
 			: $this->splitMatchValues((string)($rule['match_value'] ?? ''));
-		$length = 0;
+		$best = ['labels' => 0, 'length' => 0];
 		foreach ($values as $value) {
-			$length = max($length, strlen((string)$value));
+			$current = $this->domainSpecificity((string)$value);
+			if ($current['labels'] > $best['labels'] || ($current['labels'] === $best['labels'] && $current['length'] > $best['length'])) {
+				$best = $current;
+			}
 		}
-		return $length;
+		return $best;
+	}
+
+	/**
+	 * Check suffix without falling back to substring matching.
+	 *
+	 * @param string $value
+	 * @param string $suffix
+	 * @return bool
+	 */
+	private function endsWith(string $value, string $suffix): bool
+	{
+		return $suffix === '' || substr($value, -strlen($suffix)) === $suffix;
 	}
 
 	/**
