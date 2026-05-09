@@ -652,7 +652,7 @@ class ApplicationsController extends GeneralController
 				'app_label' => trim((string)$rule->app_label)
 			];
 		}
-		return $rules;
+		return $this->sortRulesForMatching($rules);
 	}
 
 	/**
@@ -704,6 +704,32 @@ class ApplicationsController extends GeneralController
 		$serverPort = (string)($server['port'] ?? '');
 		$protocol = strtolower((string)($flow['protocol']['l7'] ?? $flow['l7_proto'] ?? ''));
 
+		$bestDomainRule = null;
+		$bestDomainLength = -1;
+		foreach ($rules as $rule) {
+			$values = is_array($rule['match_values'] ?? null)
+				? $rule['match_values']
+				: $this->splitMatchValues((string)($rule['match_value'] ?? ''));
+			if (empty($values)) {
+				continue;
+			}
+
+			if ((string)($rule['match_type'] ?? '') !== 'domain' || $serverName === '') {
+				continue;
+			}
+			foreach ($values as $value) {
+				$needle = strtolower((string)$value);
+				$length = strlen($needle);
+				if ($length > $bestDomainLength && strpos($serverName, $needle) !== false) {
+					$bestDomainRule = $rule;
+					$bestDomainLength = $length;
+				}
+			}
+		}
+		if ($bestDomainRule !== null) {
+			return $bestDomainRule;
+		}
+
 		foreach ($rules as $rule) {
 			$values = is_array($rule['match_values'] ?? null)
 				? $rule['match_values']
@@ -713,13 +739,6 @@ class ApplicationsController extends GeneralController
 			}
 			switch ((string)($rule['match_type'] ?? '')) {
 				case 'domain':
-					if ($serverName !== '') {
-						foreach ($values as $value) {
-							if (strpos($serverName, strtolower((string)$value)) !== false) {
-								return $rule;
-							}
-						}
-					}
 					break;
 				case 'ip':
 					foreach ($values as $value) {
@@ -757,6 +776,62 @@ class ApplicationsController extends GeneralController
 		}
 
 		return null;
+	}
+
+	/**
+	 * Sort domain rules by the longest configured value before live matching.
+	 *
+	 * @param array $rules
+	 * @return array
+	 */
+	private function sortRulesForMatching(array $rules): array
+	{
+		foreach ($rules as $index => &$rule) {
+			$rule['_match_order'] = $index;
+			if (is_array($rule['match_values'] ?? null)) {
+				usort($rule['match_values'], function ($left, $right) {
+					return strlen((string)$right) <=> strlen((string)$left);
+				});
+			}
+		}
+		unset($rule);
+
+		usort($rules, function ($left, $right) {
+			$leftType = (string)($left['match_type'] ?? '');
+			$rightType = (string)($right['match_type'] ?? '');
+			if ($leftType === 'domain' && $rightType === 'domain') {
+				$result = $this->longestMatchValueLength($right) <=> $this->longestMatchValueLength($left);
+				if ($result !== 0) {
+					return $result;
+				}
+			}
+			return (int)($left['_match_order'] ?? 0) <=> (int)($right['_match_order'] ?? 0);
+		});
+
+		foreach ($rules as &$rule) {
+			unset($rule['_match_order']);
+		}
+		unset($rule);
+
+		return $rules;
+	}
+
+	/**
+	 * Return the longest configured matching value for sorting specificity.
+	 *
+	 * @param array $rule
+	 * @return int
+	 */
+	private function longestMatchValueLength(array $rule): int
+	{
+		$values = is_array($rule['match_values'] ?? null)
+			? $rule['match_values']
+			: $this->splitMatchValues((string)($rule['match_value'] ?? ''));
+		$length = 0;
+		foreach ($values as $value) {
+			$length = max($length, strlen((string)$value));
+		}
+		return $length;
 	}
 
 	/**

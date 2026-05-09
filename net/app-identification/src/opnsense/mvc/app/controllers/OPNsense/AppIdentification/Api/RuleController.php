@@ -64,9 +64,10 @@ class RuleController extends ApiMutableModelControllerBase
 
 	public function listAction(): array
 	{
-		return ['rules' => array_values(array_filter($this->collectRules(), function ($rule) {
+		$rules = array_values(array_filter($this->collectRules(), function ($rule) {
 			return (string)$rule['enabled'] === '1';
-		}))];
+		}));
+		return ['rules' => $this->sortRulesForMatching($rules)];
 	}
 
 	public function statsAction(): array
@@ -450,6 +451,50 @@ class RuleController extends ApiMutableModelControllerBase
 			}
 		}
 		return $values;
+	}
+
+	private function sortRulesForMatching(array $rules): array
+	{
+		foreach ($rules as $index => &$rule) {
+			$rule['_match_order'] = $index;
+			if (is_array($rule['match_values'] ?? null)) {
+				usort($rule['match_values'], function ($left, $right) {
+					return strlen((string)$right) <=> strlen((string)$left);
+				});
+			}
+		}
+		unset($rule);
+
+		usort($rules, function ($left, $right) {
+			$leftType = (string)($left['match_type'] ?? '');
+			$rightType = (string)($right['match_type'] ?? '');
+			if ($leftType === 'domain' && $rightType === 'domain') {
+				$result = $this->longestMatchValueLength($right) <=> $this->longestMatchValueLength($left);
+				if ($result !== 0) {
+					return $result;
+				}
+			}
+			return (int)($left['_match_order'] ?? 0) <=> (int)($right['_match_order'] ?? 0);
+		});
+
+		foreach ($rules as &$rule) {
+			unset($rule['_match_order']);
+		}
+		unset($rule);
+
+		return $rules;
+	}
+
+	private function longestMatchValueLength(array $rule): int
+	{
+		$values = is_array($rule['match_values'] ?? null)
+			? $rule['match_values']
+			: $this->splitMatchValues((string)($rule['match_value'] ?? ''));
+		$length = 0;
+		foreach ($values as $value) {
+			$length = max($length, strlen((string)$value));
+		}
+		return $length;
 	}
 
 	private function normalizeImportedMatchValue($rawValue): string

@@ -396,11 +396,43 @@ All rights reserved.
 
 		function loadCustomApplicationRules() {
 			ajaxCall('/api/appidentification/rule/list', {}, function (data) {
-				customApplicationRules = data && Array.isArray(data.rules) ? data.rules : [];
+				customApplicationRules = sortRulesForMatching(data && Array.isArray(data.rules) ? data.rules : []);
 				if ($('#grid-flows').data('UIBootgrid')) {
 					refreshFlows('manual');
 				}
 			});
+		}
+
+		function sortRulesForMatching(rules) {
+			return rules.map(function (rule, index) {
+				const copy = $.extend(true, {}, rule || {});
+				copy._match_order = index;
+				if (Array.isArray(copy.match_values)) {
+					copy.match_values.sort(function (left, right) {
+						return String(right || '').length - String(left || '').length;
+					});
+				}
+				return copy;
+			}).sort(function (left, right) {
+				const leftType = String(left.match_type || '');
+				const rightType = String(right.match_type || '');
+				if (leftType === 'domain' && rightType === 'domain') {
+					const result = longestMatchValueLength(right) - longestMatchValueLength(left);
+					if (result !== 0) {
+						return result;
+					}
+				}
+				return Number(left._match_order || 0) - Number(right._match_order || 0);
+			}).map(function (rule) {
+				delete rule._match_order;
+				return rule;
+			});
+		}
+
+		function longestMatchValueLength(rule) {
+			return splitRuleMatchValues(rule).reduce(function (maxLength, value) {
+				return Math.max(maxLength, String(value || '').length);
+			}, 0);
 		}
 
 		function ipv4ToNumber(ip) {
@@ -464,6 +496,8 @@ All rights reserved.
 			const serverPort = String(row.server_port || '');
 			const protocol = String(row.protocol || row.l7_proto || row.info || '').toLowerCase();
 
+			let bestDomainRule = null;
+			let bestDomainLength = -1;
 			for (let idx = 0; idx < customApplicationRules.length; idx++) {
 				const rule = customApplicationRules[idx] || {};
 				const type = String(rule.match_type || '');
@@ -474,11 +508,26 @@ All rights reserved.
 
 				if (type === 'domain') {
 					for (let i = 0; i < values.length; i++) {
-						if (serverName.indexOf(values[i].toLowerCase()) !== -1) {
-							return rule;
+						const needle = values[i].toLowerCase();
+						if (needle.length > bestDomainLength && serverName.indexOf(needle) !== -1) {
+							bestDomainRule = rule;
+							bestDomainLength = needle.length;
 						}
 					}
 				}
+			}
+			if (bestDomainRule !== null) {
+				return bestDomainRule;
+			}
+
+			for (let idx = 0; idx < customApplicationRules.length; idx++) {
+				const rule = customApplicationRules[idx] || {};
+				const type = String(rule.match_type || '');
+				const values = splitRuleMatchValues(rule);
+				if (values.length === 0 || type === 'domain') {
+					continue;
+				}
+
 				if (type === 'ip') {
 					for (let i = 0; i < values.length; i++) {
 						if (serverIp === values[i] || clientIp === values[i]) {
