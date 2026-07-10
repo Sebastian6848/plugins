@@ -56,9 +56,9 @@ function antivirus_bootup($verbose = false)
 
 function antivirus_configure_do($verbose = false)
 {
-    $response = configd_run('template reload OPNsense/Antivirus');
+    $response = configd_run('antivirus reload');
     if ($verbose) {
-        printf("template reload OPNsense/Antivirus: %s\n", trim($response));
+        printf("antivirus reload: %s\n", trim($response));
     }
 }
 

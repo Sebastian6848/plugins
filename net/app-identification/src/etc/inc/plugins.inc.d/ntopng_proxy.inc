@@ -101,8 +101,8 @@ function ntopng_proxy_services()
 		'description' => gettext('Application Identification (ntopng)'),
 		'configd' => [
 			'restart' => ['appidentification ntopng_restart'],
-			'start' => ['ntopng start'],
-			'stop' => ['ntopng stop'],
+			'start' => ['appidentification start'],
+			'stop' => ['appidentification stop'],
 		],
 		'pid' => '/var/run/ntopng/ntopng.pid',
 	];

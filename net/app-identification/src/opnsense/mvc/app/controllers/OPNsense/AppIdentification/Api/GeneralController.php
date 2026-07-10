@@ -344,6 +344,21 @@ class GeneralController extends ApiControllerBase
 			return $generateResult;
 		}
 
+		$model = $this->getModel();
+		if ((string)$model->enabled !== '1') {
+			$stopResult = $this->backend()->run([
+				'action' => 'stop',
+				'settings' => $this->backendSettings(),
+			]);
+			if (($stopResult['status'] ?? '') === 'error') {
+				return $stopResult;
+			}
+			return [
+				'status' => 'ok',
+				'message' => trim(($generateResult['message'] ?? '') . ' App Identification stopped.')
+			];
+		}
+
 		$restartResult = $this->backend()->run([
 			'action' => 'restart',
 			'settings' => $this->backendSettings(),

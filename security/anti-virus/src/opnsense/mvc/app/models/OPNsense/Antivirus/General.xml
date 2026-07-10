@@ -11,6 +11,18 @@
             <Default>5M</Default>
             <Required>Y</Required>
         </max_scan_size>
+        <proxy_port type="PortField">
+            <Default>3128</Default>
+            <Required>Y</Required>
+        </proxy_port>
+        <icap_port type="PortField">
+            <Default>1344</Default>
+            <Required>Y</Required>
+        </icap_port>
+        <clamd_port type="PortField">
+            <Default>3310</Default>
+            <Required>Y</Required>
+        </clamd_port>
         <scan_options type="OptionField">
             <Multiple>Y</Multiple>
             <Default>pe,elf,ole2,pdf,swf,xmldocs,hwp3,mail,html,archive</Default>

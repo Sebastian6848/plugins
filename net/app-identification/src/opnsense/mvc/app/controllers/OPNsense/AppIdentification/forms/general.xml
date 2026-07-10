@@ -1,117 +1,117 @@
 <form>
-    <field id="general.enabled" label="Enable ntopng" type="checkbox" help="Enable ntopng service managed by App Identification plugin.">
+    <field>
         <id>general.enabled</id>
         <label>Enable ntopng</label>
         <type>checkbox</type>
         <help>Enable ntopng service managed by App Identification plugin.</help>
     </field>
-    <field id="general.interfaces" label="Interfaces" type="select_multiple" help="Select interfaces to monitor. Leave empty to choose from ntopng UI.">
+    <field>
         <id>general.interfaces</id>
         <label>Interfaces</label>
         <type>select_multiple</type>
         <advanced>true</advanced>
         <help>Select interfaces to monitor. Leave empty to choose from ntopng UI.</help>
     </field>
-    <field id="general.rest_scheme" label="REST Scheme" type="dropdown" help="Protocol used for ntopng REST API endpoint.">
+    <field>
         <id>general.rest_scheme</id>
         <label>REST Scheme</label>
         <type>dropdown</type>
         <help>Protocol used for ntopng REST API endpoint.</help>
     </field>
-    <field id="general.rest_host" label="REST Host" type="text" help="Hostname or IP address of ntopng REST API endpoint.">
+    <field>
         <id>general.rest_host</id>
         <label>REST Host</label>
         <type>text</type>
         <help>Hostname or IP address of ntopng REST API endpoint.</help>
     </field>
-    <field id="general.rest_port" label="REST Port" type="text" help="Port of ntopng REST API endpoint.">
+    <field>
         <id>general.rest_port</id>
         <label>REST Port</label>
         <type>text</type>
         <help>Port of ntopng REST API endpoint.</help>
     </field>
-    <field id="general.ifid" label="Interface ID" type="text" help="ntopng interface id used by REST calls. Use 0 unless ntopng exposes another interface id.">
+    <field>
         <id>general.ifid</id>
         <label>Interface ID</label>
         <type>text</type>
         <help>ntopng interface id used by REST calls. Use 0 unless ntopng exposes another interface id.</help>
     </field>
-    <field id="general.auth_mode" label="Authentication Mode" type="dropdown" help="Token is preferred. When token is empty, username and password are used to create an ntopng session cookie.">
+    <field>
         <id>general.auth_mode</id>
         <label>Authentication Mode</label>
         <type>dropdown</type>
         <help>Token is preferred. When token is empty, username and password are used to create an ntopng session cookie.</help>
     </field>
-    <field id="general.auth_username" label="Auth Username" type="text" help="Fallback username used when API Token is empty.">
+    <field>
         <id>general.auth_username</id>
         <label>Auth Username</label>
         <type>text</type>
         <help>Fallback username used when API Token is empty.</help>
     </field>
-    <field id="general.auth_password" label="Auth Password" type="password" help="Fallback password used when API Token is empty.">
+    <field>
         <id>general.auth_password</id>
         <label>Auth Password</label>
         <type>password</type>
         <help>Fallback password used when API Token is empty.</help>
     </field>
-    <field id="general.auth_token" label="Auth Token" type="password" help="Recommended: generate this in ntopng user settings API Token.">
+    <field>
         <id>general.auth_token</id>
         <label>Auth Token</label>
         <type>password</type>
         <help>Recommended: generate this in ntopng user settings API Token.</help>
     </field>
-    <field id="general.auth_cookie" label="Auth Cookie" type="text" help="Cookie header value used when Authentication Mode is Cookie.">
+    <field>
         <id>general.auth_cookie</id>
         <label>Auth Cookie</label>
         <type>text</type>
         <help>Cookie header value used when Authentication Mode is Cookie.</help>
     </field>
-    <field id="general.http_port" label="HTTP Port" type="text" help="HTTP port used by ntopng.">
+    <field>
         <id>general.http_port</id>
         <label>HTTP Port</label>
         <type>text</type>
         <help>HTTP port used by ntopng.</help>
     </field>
-    <field id="general.https_port" label="HTTPS Port" type="text" help="HTTPS port used by ntopng. Configure certificate when enabled.">
+    <field>
         <id>general.https_port</id>
         <label>HTTPS Port</label>
         <type>text</type>
         <help>HTTPS port used by ntopng. Configure certificate when enabled.</help>
     </field>
-    <field id="general.certificate" label="Certificate" type="dropdown" help="Certificate used by ntopng HTTPS endpoint.">
+    <field>
         <id>general.certificate</id>
         <label>Certificate</label>
         <type>dropdown</type>
         <help>Certificate used by ntopng HTTPS endpoint.</help>
     </field>
-    <field id="general.dns_mode" label="DNS Mode" type="dropdown" help="DNS resolution mode used by ntopng.">
+    <field>
         <id>general.dns_mode</id>
         <label>DNS Mode</label>
         <type>dropdown</type>
         <help>DNS resolution mode used by ntopng.</help>
     </field>
-    <field id="general.max_flows" label="Maximum Flows" type="text" help="Maximum number of concurrent flows managed by ntopng.">
+    <field>
         <id>general.max_flows</id>
         <label>Maximum Flows</label>
         <type>text</type>
         <advanced>true</advanced>
         <help>Maximum number of concurrent flows managed by ntopng.</help>
     </field>
-    <field id="general.max_hosts" label="Maximum Hosts" type="text" help="Maximum number of hosts managed by ntopng.">
+    <field>
         <id>general.max_hosts</id>
         <label>Maximum Hosts</label>
         <type>text</type>
         <advanced>true</advanced>
         <help>Maximum number of hosts managed by ntopng.</help>
     </field>
-    <field id="general.local_networks" label="Local Networks" type="text" help="Comma separated local network definitions, for example 192.168.1.0/24,10.0.0.0/8.">
+    <field>
         <id>general.local_networks</id>
         <label>Local Networks</label>
         <type>text</type>
         <advanced>true</advanced>
         <help>Comma separated local network definitions, for example 192.168.1.0/24,10.0.0.0/8.</help>
     </field>
-    <field id="general.extra_options" label="Extra Options" type="textbox" help="Additional ntopng command line options, one option per line.">
+    <field>
         <id>general.extra_options</id>
         <label>Extra Options</label>
         <type>textbox</type>

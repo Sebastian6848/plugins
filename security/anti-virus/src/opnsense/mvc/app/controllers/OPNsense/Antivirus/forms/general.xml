@@ -1,23 +1,41 @@
 <form>
-    <field id="general.enabled" label="Enable antivirus proxy" type="checkbox" help="This will activate the integrated c-icap and ClamAV proxy scanner.">
+    <field>
         <id>general.enabled</id>
         <label>Enable antivirus proxy</label>
         <type>checkbox</type>
         <help>This will activate the integrated c-icap and ClamAV proxy scanner.</help>
     </field>
-    <field id="general.max_scan_size" label="Max scan size" type="text" help="Maximum ICAP object size to scan, for example 5M.">
+    <field>
         <id>general.max_scan_size</id>
         <label>Max scan size</label>
         <type>text</type>
         <help>Maximum ICAP object size to scan, for example 5M.</help>
     </field>
-    <field id="general.scan_options" label="Scan engines/features" type="select_multiple" help="Select ClamAV scan features to enable.">
+    <field>
+        <id>general.proxy_port</id>
+        <label>Proxy listen port</label>
+        <type>text</type>
+        <help>Local Squid proxy port managed by this plugin.</help>
+    </field>
+    <field>
+        <id>general.icap_port</id>
+        <label>ICAP listen port</label>
+        <type>text</type>
+        <help>Local c-icap port used by Squid.</help>
+    </field>
+    <field>
+        <id>general.clamd_port</id>
+        <label>ClamAV TCP port</label>
+        <type>text</type>
+        <help>Local ClamAV TCP port used by c-icap.</help>
+    </field>
+    <field>
         <id>general.scan_options</id>
         <label>Scan engines/features</label>
         <type>select_multiple</type>
         <help>Select ClamAV scan features to enable.</help>
     </field>
-    <field id="general.scan_file_types" label="ICAP file types" type="select_multiple" help="Select c-icap file type categories passed to virus_scan.">
+    <field>
         <id>general.scan_file_types</id>
         <label>ICAP file types</label>
         <type>select_multiple</type>
