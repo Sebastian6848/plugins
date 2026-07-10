@@ -7,8 +7,6 @@
 
 namespace OPNsense\AppIdentification\Api;
 
-use OPNsense\Core\Backend;
-
 /**
  * Class ApplicationsController
  *
@@ -16,16 +14,6 @@ use OPNsense\Core\Backend;
  */
 class ApplicationsController extends GeneralController
 {
-	/**
-	 * Custom nDPI protocol rules file path.
-	 */
-	private const CUSTOM_RULES_FILE = '/var/lib/ntopng/protos.txt';
-
-	/**
-	 * Backend action namespace.
-	 */
-	private const BACKEND_NAMESPACE = 'appidentification';
-
 	/**
 	 * List detected L7 protocols and traffic statistics on current interface.
 	 *
@@ -439,11 +427,10 @@ class ApplicationsController extends GeneralController
 	public function applyRulesAction(): array
 	{
 		try {
-			$response = trim((new Backend())->configdRun(self::BACKEND_NAMESPACE . ' reload'));
-			return [
-				'status' => 'ok',
-				'message' => $response !== '' ? $response : 'ntopng reload command executed.'
-			];
+			return $this->backend()->run([
+				'action' => 'reload',
+				'settings' => $this->backendSettings(),
+			]);
 		} catch (\Throwable $e) {
 			return [
 				'status' => 'error',
@@ -498,8 +485,7 @@ class ApplicationsController extends GeneralController
 			return [
 				'status' => 'ok',
 				'rows' => $rules,
-				'total' => count($rules),
-				'file' => self::CUSTOM_RULES_FILE
+				'total' => count($rules)
 			];
 		} catch (\Throwable $e) {
 			return [
@@ -1116,15 +1102,10 @@ class ApplicationsController extends GeneralController
 	 */
 	private function readRawRuleLines(): array
 	{
-		$raw = trim((new Backend())->configdRun(self::BACKEND_NAMESPACE . ' read_rules'));
-		if ($raw === '') {
-			return [];
-		}
-
-		$payload = json_decode($raw, true);
-		if (!is_array($payload)) {
-			throw new \RuntimeException('Cannot decode backend read_rules response.');
-		}
+		$payload = $this->backend()->run([
+			'action' => 'read_rules',
+			'settings' => $this->backendSettings(),
+		]);
 		if (($payload['status'] ?? '') !== 'ok') {
 			throw new \RuntimeException((string)($payload['message'] ?? 'Cannot read protos.txt file.'));
 		}
@@ -1176,20 +1157,13 @@ class ApplicationsController extends GeneralController
 			return rtrim((string)$line, "\r\n");
 		}, $lines));
 
-		$payload = json_encode(['rules' => $payloadLines]);
-		if (!is_string($payload)) {
-			throw new \RuntimeException('Cannot encode custom rules payload.');
-		}
-
-		$backend = new Backend();
-		$responseRaw = trim($backend->configdpRun(self::BACKEND_NAMESPACE, ['write_rules', $payload]));
-		if ($responseRaw === '') {
-			throw new \RuntimeException('Empty response when writing protos.txt via backend.');
-		}
-
-		$response = json_decode($responseRaw, true);
-		if (!is_array($response) || ($response['status'] ?? '') !== 'ok') {
-			$message = is_array($response) ? (string)($response['message'] ?? 'unknown backend failure') : $responseRaw;
+		$response = $this->backend()->run([
+			'action' => 'write_rules',
+			'settings' => $this->backendSettings(),
+			'rules' => $payloadLines,
+		]);
+		if (($response['status'] ?? '') !== 'ok') {
+			$message = (string)($response['message'] ?? 'unknown backend failure');
 			throw new \RuntimeException('Cannot write protos.txt file: ' . $message);
 		}
 	}
@@ -1201,13 +1175,11 @@ class ApplicationsController extends GeneralController
 	 */
 	private function reloadRules(): void
 	{
-		$responseRaw = trim((new Backend())->configdRun(self::BACKEND_NAMESPACE . ' reload'));
-		if ($responseRaw === '') {
-			return;
-		}
-
-		$response = json_decode($responseRaw, true);
-		if (is_array($response) && ($response['status'] ?? '') === 'error') {
+		$response = $this->backend()->run([
+			'action' => 'reload',
+			'settings' => $this->backendSettings(),
+		]);
+		if (($response['status'] ?? '') === 'error') {
 			throw new \RuntimeException((string)($response['message'] ?? 'Unable to reload ntopng.'));
 		}
 	}

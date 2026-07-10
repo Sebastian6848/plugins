@@ -29,7 +29,7 @@
 namespace OPNsense\Antivirus\Api;
 
 use OPNsense\Base\ApiControllerBase;
-use OPNsense\Core\Backend;
+use OPNsense\Antivirus\Backend\BackendFacade;
 
 /**
  * Class ServiceController
@@ -37,12 +37,15 @@ use OPNsense\Core\Backend;
  */
 class ServiceController extends ApiControllerBase
 {
+    private function backend(): BackendFacade
+    {
+        return new BackendFacade();
+    }
+
     public function startAction()
     {
         if ($this->request->isPost()) {
-            $backend = new Backend();
-            $response = trim($backend->configdRun("antivirus start"));
-            return array("status" => $response);
+            return $this->backend()->run("start");
         }
         return array("status" => "error");
     }
@@ -50,9 +53,7 @@ class ServiceController extends ApiControllerBase
     public function stopAction()
     {
         if ($this->request->isPost()) {
-            $backend = new Backend();
-            $response = trim($backend->configdRun("antivirus stop"));
-            return array("status" => $response);
+            return $this->backend()->run("stop");
         }
         return array("status" => "error");
     }
@@ -60,9 +61,7 @@ class ServiceController extends ApiControllerBase
     public function restartAction()
     {
         if ($this->request->isPost()) {
-            $backend = new Backend();
-            $response = trim($backend->configdRun("antivirus restart"));
-            return array("status" => $response);
+            return $this->backend()->run("restart");
         }
         return array("status" => "error");
     }
@@ -70,9 +69,7 @@ class ServiceController extends ApiControllerBase
     public function startServiceAction($service = '')
     {
         if ($this->request->isPost() && in_array($service, array('clamd', 'cicap', 'freshclam', 'squid_icap'))) {
-            $backend = new Backend();
-            $response = trim($backend->configdRun("antivirus start_service " . $service));
-            return array("status" => $response);
+            return $this->backend()->run("start_service", [$service]);
         }
         return array("status" => "error");
     }
@@ -80,17 +77,14 @@ class ServiceController extends ApiControllerBase
     public function reconfigureAction()
     {
         if ($this->request->isPost()) {
-            $backend = new Backend();
-            $response = trim($backend->configdRun("antivirus reload"));
-            return array("status" => $response);
+            return $this->backend()->run("reload");
         }
         return array("status" => "error");
     }
 
     public function statusAction()
     {
-        $backend = new Backend();
-        $response = json_decode(trim($backend->configdRun("antivirus status")), true);
+        $response = $this->backend()->run("status");
         if ($response != null) {
             $response['status'] = (
                 ($response['clamd'] ?? '') == 'running' &&
@@ -114,13 +108,7 @@ class ServiceController extends ApiControllerBase
     public function freshclamAction()
     {
         if ($this->request->isPost()) {
-            $backend = new Backend();
-            $command = 'antivirus freshclam';
-            if ($this->request->hasPost('action')) {
-                $command .= ' go';
-            }
-            $response = trim($backend->configdRun($command));
-            return array('status' => $response);
+            return $this->backend()->run('freshclam', [$this->request->hasPost('action') ? 'go' : '']);
         } else {
             return array('status' => 'error');
         }
@@ -138,9 +126,8 @@ class ServiceController extends ApiControllerBase
             "bytecode" => array("bytecode.cvd", "bytecode.cld"),
             "signatures" => array("Total number of signatures")
         );
-        $backend = new Backend();
         $result = array();
-        $response = json_decode($backend->configdRun("antivirus version"));
+        $response = $this->backend()->run("version");
         if ($response != null) {
             foreach ($response as $key => $value) {
                 foreach ($infos as $info_key => $info) {

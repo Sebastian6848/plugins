@@ -8,9 +8,9 @@
 namespace OPNsense\AppIdentification\Api;
 
 use OPNsense\Base\ApiControllerBase;
-use OPNsense\Core\Backend;
 use OPNsense\Core\Config;
 use OPNsense\AppIdentification\AppIdentification;
+use OPNsense\AppIdentification\Backend\BackendFacade;
 
 /**
  * Class GeneralController
@@ -23,6 +23,7 @@ class GeneralController extends ApiControllerBase
 	 * Cached model instance.
 	 */
 	private $model;
+	private $backend;
 
 	/**
 	 * Read ntopng settings model.
@@ -125,11 +126,10 @@ class GeneralController extends ApiControllerBase
 	public function ntopngrestartAction(): array
 	{
 		try {
-			$response = trim((new Backend())->configdRun('appidentification ntopng_restart'));
-			return [
-				'status' => 'ok',
-				'message' => $response !== '' ? $response : 'ntopng restarted.'
-			];
+			return $this->backend()->run([
+				'action' => 'restart',
+				'settings' => $this->backendSettings(),
+			]);
 		} catch (\Throwable $e) {
 			return [
 				'status' => 'error',
@@ -147,119 +147,12 @@ class GeneralController extends ApiControllerBase
 	 */
 	protected function proxyRequest(string $endpoint, array $params = []): array
 	{
-		try {
-			$endpoint = ltrim($endpoint, '/');
-			$url = $this->getRestBaseUrl() . $endpoint;
-
-			if (!empty($params)) {
-				$separator = strpos($url, '?') === false ? '?' : '&';
-				$url .= $separator . http_build_query($params);
-			}
-
-			$headers = ['Accept: application/json'];
-			$token = trim((string)($this->getModel()->auth_token ?? ''));
-			$cookieStr = '';
-
-			syslog(LOG_WARNING, 'AppIdentification proxyRequest: url=' . $url . ' token_len=' . strlen($token));
-
-			if ($token !== '') {
-				$headers[] = 'Authorization: Token ' . $token;
-			} else {
-				syslog(LOG_WARNING, 'AppIdentification proxyRequest: no token, trying session auth');
-				$cookieStr = $this->getNtopngSession();
-				if ($cookieStr === '') {
-					syslog(LOG_ERR, 'AppIdentification proxyRequest: session auth failed, empty cookie');
-					return [
-						'status' => 'error',
-						'message' => 'ntopng 认证失败'
-					];
-				}
-				syslog(LOG_WARNING, 'AppIdentification proxyRequest: session cookie acquired len=' . strlen($cookieStr));
-			}
-
-			$ch = curl_init($url);
-			if ($ch === false) {
-				syslog(LOG_ERR, 'AppIdentification proxyRequest: unable to initialize cURL client');
-				return [
-					'status' => 'error',
-					'message' => 'Unable to initialize cURL client.'
-				];
-			}
-
-			curl_setopt_array($ch, [
-				CURLOPT_RETURNTRANSFER => true,
-				CURLOPT_CONNECTTIMEOUT => 5,
-				CURLOPT_TIMEOUT => 5,
-				CURLOPT_FAILONERROR => false,
-				CURLOPT_FOLLOWLOCATION => false,
-				CURLOPT_HTTPHEADER => $headers,
-			]);
-			if ($cookieStr !== '') {
-				curl_setopt($ch, CURLOPT_COOKIE, $cookieStr);
-			}
-
-			$responseRaw = curl_exec($ch);
-			$httpCode = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
-			$curlErr = curl_error($ch);
-			curl_close($ch);
-
-			syslog(LOG_WARNING, 'AppIdentification proxyRequest: httpCode=' . $httpCode . ' curlErr=' . $curlErr . ' bodyLen=' . strlen((string)$responseRaw));
-			syslog(LOG_WARNING, 'AppIdentification proxyRequest: bodyPreview=' . substr((string)$responseRaw, 0, 200));
-
-			if ($responseRaw === false) {
-				syslog(LOG_ERR, 'AppIdentification: curl exec failed: ' . $curlErr);
-				return [
-					'status' => 'error',
-					'message' => sprintf('curl 请求失败: %s', $curlErr)
-				];
-			}
-
-			if ($httpCode === 302) {
-				syslog(LOG_ERR, 'AppIdentification: auth failed, got 302');
-				return [
-					'status' => 'error',
-					'message' => 'ntopng 认证失败(302)'
-				];
-			}
-
-			if ($httpCode >= 400) {
-				syslog(LOG_ERR, 'AppIdentification: HTTP error ' . $httpCode);
-				return [
-					'status' => 'error',
-					'message' => sprintf('ntopng returned HTTP error %d', $httpCode),
-					'http_code' => $httpCode
-				];
-			}
-
-			if ($httpCode === 0) {
-				syslog(LOG_ERR, 'AppIdentification: connection failed, httpCode=0');
-				return [
-					'status' => 'error',
-					'message' => '无法连接到 ntopng，请检查服务是否运行',
-					'http_code' => 0
-				];
-			}
-
-			$decoded = json_decode((string)$responseRaw, true);
-			if (json_last_error() !== JSON_ERROR_NONE || !is_array($decoded)) {
-				syslog(LOG_ERR, 'AppIdentification: JSON parse failed: ' . json_last_error_msg());
-				syslog(LOG_ERR, 'AppIdentification: ntopng 返回非 JSON 内容: ' . substr((string)$responseRaw, 0, 300));
-				return [
-					'status' => 'error',
-					'message' => 'Invalid JSON returned by ntopng',
-					'http_code' => $httpCode
-				];
-			}
-
-			syslog(LOG_WARNING, 'AppIdentification proxyRequest: success, rc=' . ($decoded['rc'] ?? 'N/A'));
-			return $decoded;
-		} catch (\Throwable $e) {
-			syslog(LOG_ERR, 'AppIdentification proxyRequest: unhandled error: ' . $e->getMessage());
-			return [
-				'status' => 'error',
-				'message' => sprintf('Unhandled proxy error: %s', $e->getMessage())
-			];
-		}
+		return $this->backend()->run([
+			'action' => 'api_get',
+			'settings' => $this->backendSettings(),
+			'endpoint' => $endpoint,
+			'params' => $params,
+		]);
 	}
 
 	/**
@@ -296,53 +189,6 @@ class GeneralController extends ApiControllerBase
 	}
 
 	/**
-	 * Create an ntopng session cookie for username/password fallback authentication.
-	 *
-	 * @return string
-	 */
-	private function getNtopngSession(): string
-	{
-		try {
-			$model = $this->getModel();
-			$host = $this->getRestHost();
-			$port = $this->getRestPort();
-			$user = trim((string)($model->auth_username ?? 'admin'));
-			$pass = (string)($model->auth_password ?? '');
-
-			if ($user === '' || $pass === '') {
-				return '';
-			}
-
-			$ch = curl_init(sprintf('%s://%s:%s/authorize.html', $this->getRestScheme(), $host, $port));
-			if ($ch === false) {
-				return '';
-			}
-
-			curl_setopt_array($ch, [
-				CURLOPT_POST => true,
-				CURLOPT_POSTFIELDS => http_build_query(['user' => $user, 'password' => $pass]),
-				CURLOPT_RETURNTRANSFER => true,
-				CURLOPT_HEADER => true,
-				CURLOPT_FOLLOWLOCATION => false,
-				CURLOPT_TIMEOUT => 5,
-			]);
-			$response = curl_exec($ch);
-			curl_close($ch);
-
-			if (!is_string($response) || strpos($response, 'wrong-credentials') !== false) {
-				syslog(LOG_ERR, 'AppIdentification: ntopng 用户名或密码错误');
-				return '';
-			}
-
-			preg_match('/Set-Cookie:\s*(session_' . preg_quote($port, '/') . '_\d+=[^;]+)/i', $response, $matches);
-			return $matches[1] ?? '';
-		} catch (\Throwable $e) {
-			syslog(LOG_ERR, 'AppIdentification: ntopng session login failed: ' . $e->getMessage());
-			return '';
-		}
-	}
-
-	/**
 	 * Return current plugin model.
 	 *
 	 * @return AppIdentification
@@ -354,16 +200,6 @@ class GeneralController extends ApiControllerBase
 		}
 
 		return $this->model;
-	}
-
-	/**
-	 * Build ntopng REST base URL from model settings.
-	 *
-	 * @return string
-	 */
-	private function getRestBaseUrl(): string
-	{
-		return sprintf('%s://%s:%s/lua/rest/v2/get/', $this->getRestScheme(), $this->getRestHost(), $this->getRestPort());
 	}
 
 	private function getRestScheme(): string
@@ -483,25 +319,11 @@ class GeneralController extends ApiControllerBase
 			}
 			$config['interfaces'] = implode(',', $interfaces);
 
-			$args = [
-				escapeshellarg($config['enabled']),
-				escapeshellarg($config['interfaces']),
-				escapeshellarg($config['http_port']),
-				escapeshellarg($config['https_port']),
-				escapeshellarg($config['dns_mode']),
-				escapeshellarg($config['certificate']),
-				escapeshellarg($config['max_flows']),
-				escapeshellarg($config['max_hosts']),
-				escapeshellarg($config['local_networks']),
-				escapeshellarg($config['extra_options'])
-			];
-
-			$response = trim((new Backend())->configdRun('appidentification ntopng_generate ' . implode(' ', $args)));
-
-			return [
-				'status' => 'ok',
-				'message' => $response !== '' ? $response : 'ntopng.conf generated.'
-			];
+			return $this->backend()->run([
+				'action' => 'generate',
+				'settings' => $this->backendSettings(),
+				'config' => $config,
+			]);
 		} catch (\Throwable $e) {
 			return [
 				'status' => 'error',
@@ -522,10 +344,38 @@ class GeneralController extends ApiControllerBase
 			return $generateResult;
 		}
 
-		$restartResult = trim((new Backend())->configdRun('appidentification ntopng_restart'));
+		$restartResult = $this->backend()->run([
+			'action' => 'restart',
+			'settings' => $this->backendSettings(),
+		]);
+		if (($restartResult['status'] ?? '') === 'error') {
+			return $restartResult;
+		}
 		return [
 			'status' => 'ok',
-			'message' => $restartResult !== '' ? $restartResult : 'ntopng restarted.'
+			'message' => trim(($generateResult['message'] ?? '') . ' ' . ($restartResult['message'] ?? 'ntopng restarted.'))
+		];
+	}
+
+	protected function backend(): BackendFacade
+	{
+		if ($this->backend === null) {
+			$this->backend = new BackendFacade();
+		}
+		return $this->backend;
+	}
+
+	protected function backendSettings(): array
+	{
+		$model = $this->getModel();
+		return [
+			'rest_scheme' => $this->getRestScheme(),
+			'rest_host' => $this->getRestHost(),
+			'rest_port' => $this->getRestPort(),
+			'auth_token' => trim((string)($model->auth_token ?? '')),
+			'auth_username' => trim((string)($model->auth_username ?? 'admin')),
+			'auth_password' => (string)($model->auth_password ?? ''),
+			'ifid' => $this->getIfid(),
 		];
 	}
 }

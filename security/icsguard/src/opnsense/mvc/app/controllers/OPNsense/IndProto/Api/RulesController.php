@@ -3,7 +3,7 @@
 namespace OPNsense\IndProto\Api;
 
 use OPNsense\Base\ApiMutableModelControllerBase;
-use OPNsense\Core\Backend;
+use OPNsense\IndProto\Backend\BackendFacade;
 
 class RulesController extends ApiMutableModelControllerBase
 {
@@ -55,9 +55,9 @@ class RulesController extends ApiMutableModelControllerBase
             return array("status" => "error", "message" => "Unable to save configuration");
         }
 
-        $backend = new Backend();
-        $reload = trim($backend->configdRun("indproto reload"));
-        $restart = trim($backend->configdRun("indproto restart_suricata"));
+        $backend = new BackendFacade();
+        $reload = $backend->run("reload");
+        $restart = $backend->run("restart_suricata");
 
         return array(
             "status" => "ok",

@@ -29,14 +29,13 @@
 namespace OPNsense\Antivirus\Api;
 
 use OPNsense\Base\ApiControllerBase;
-use OPNsense\Core\Backend;
+use OPNsense\Antivirus\Backend\BackendFacade;
 
 class LogsController extends ApiControllerBase
 {
     private function loadLogs(string $mode): array
     {
-        $backend = new Backend();
-        $response = json_decode($backend->configdRun("antivirus logs {$mode}"), true);
+        $response = (new BackendFacade())->run("logs", [$mode]);
         if (is_array($response)) {
             return $response;
         }

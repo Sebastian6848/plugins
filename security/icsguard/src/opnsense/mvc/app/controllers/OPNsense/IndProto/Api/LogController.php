@@ -3,7 +3,7 @@
 namespace OPNsense\IndProto\Api;
 
 use OPNsense\Base\ApiControllerBase;
-use OPNsense\Core\Backend;
+use OPNsense\IndProto\Backend\BackendFacade;
 
 class LogController extends ApiControllerBase
 {
@@ -60,8 +60,8 @@ class LogController extends ApiControllerBase
         $startTime = $this->safeValue($this->requestParam('start_time'));
         $endTime = $this->safeValue($this->requestParam('end_time'));
 
-        $backend = new Backend();
-        $response = $backend->configdRun("indproto log {$proto} {$srcIp} {$dstIp} {$startTime} {$endTime} {$limit}");
+        $backend = new BackendFacade();
+        $response = $backend->raw("log", ["--proto", $proto, "--src_ip", $srcIp, "--dst_ip", $dstIp, "--start_time", $startTime, "--end_time", $endTime, "--limit", (string)$limit]);
         $rows = json_decode($response, true);
         if (!is_array($rows)) {
             $rows = array();
