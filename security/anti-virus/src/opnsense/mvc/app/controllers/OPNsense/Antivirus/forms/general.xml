@@ -1,23 +1,23 @@
 <form>
-    <field>
+    <field id="general.enabled" label="Enable antivirus proxy" type="checkbox" help="This will activate the integrated c-icap and ClamAV proxy scanner.">
         <id>general.enabled</id>
         <label>Enable antivirus proxy</label>
         <type>checkbox</type>
         <help>This will activate the integrated c-icap and ClamAV proxy scanner.</help>
     </field>
-    <field>
+    <field id="general.max_scan_size" label="Max scan size" type="text" help="Maximum ICAP object size to scan, for example 5M.">
         <id>general.max_scan_size</id>
         <label>Max scan size</label>
         <type>text</type>
         <help>Maximum ICAP object size to scan, for example 5M.</help>
     </field>
-    <field>
+    <field id="general.scan_options" label="Scan engines/features" type="select_multiple" help="Select ClamAV scan features to enable.">
         <id>general.scan_options</id>
         <label>Scan engines/features</label>
         <type>select_multiple</type>
         <help>Select ClamAV scan features to enable.</help>
     </field>
-    <field>
+    <field id="general.scan_file_types" label="ICAP file types" type="select_multiple" help="Select c-icap file type categories passed to virus_scan.">
         <id>general.scan_file_types</id>
         <label>ICAP file types</label>
         <type>select_multiple</type>

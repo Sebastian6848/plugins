@@ -1,17 +1,17 @@
 <form>
-    <field>
+    <field id="indproto.general.enabled" label="Enabled" type="checkbox" help="Enable industrial protocol rule generation.">
         <id>indproto.general.enabled</id>
         <label>Enabled</label>
         <type>checkbox</type>
         <help>Enable industrial protocol rule generation.</help>
     </field>
-    <field>
+    <field id="indproto.general.default_action" label="Default action" type="dropdown" help="Choose the fallback action for Modbus traffic that does not match a rule.">
         <id>indproto.general.default_action</id>
         <label>Default action</label>
         <type>dropdown</type>
         <help>Choose the fallback action for Modbus traffic that does not match a rule.</help>
     </field>
-    <field>
+    <field id="indproto.general.interface" label="Interface" type="dropdown" help="Select the interface where Suricata inspects industrial protocol traffic.">
         <id>indproto.general.interface</id>
         <label>Interface</label>
         <type>dropdown</type>
